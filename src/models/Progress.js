@@ -1,18 +1,43 @@
 const mongoose = require('mongoose');
 
-const ProgressSchema = new mongoose.Schema(
+const progressSchema = new mongoose.Schema(
   {
-    user:               { type: mongoose.Schema.Types.ObjectId, ref: 'User',   required: true },
-    course:             { type: mongoose.Schema.Types.ObjectId, ref: 'Course', required: true },
-    completedLessons:   [{ type: mongoose.Schema.Types.ObjectId, ref: 'Lesson' }],
-    quizScores:         [{ quiz: mongoose.Schema.Types.ObjectId, score: Number, date: Date }],
-    assignmentsSubmitted: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Assignment' }],
-    progressPercent:    { type: Number, default: 0 },
-    completedAt:        Date,
+    student: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    course: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Course',
+      required: true,
+    },
+    // Array of completed lesson or module identifiers (Strings or ObjectIds)
+    completedLessons: [
+      {
+        type: String, // E.g. "Module 1 - Introduction" or Lesson ObjectId
+      },
+    ],
+    // Overall completion percentage 0-100
+    percentage: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+    isCompleted: {
+      type: Boolean,
+      default: false,
+    },
+    lastAccessedAt: {
+      type: Date,
+      default: Date.now,
+    },
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
-ProgressSchema.index({ user: 1, course: 1 }, { unique: true });
+// Ensure one progress document per student per course
+progressSchema.index({ student: 1, course: 1 }, { unique: true });
 
-module.exports = mongoose.model('Progress', ProgressSchema);
+module.exports = mongoose.model('Progress', progressSchema);
