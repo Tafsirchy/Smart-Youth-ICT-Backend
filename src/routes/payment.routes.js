@@ -4,36 +4,16 @@ const { protect }   = require('../middleware/auth.middleware');
 const { authorize } = require('../middleware/role.middleware');
 const Payment      = require('../models/Payment');
 const Enrollment   = require('../models/Enrollment');
+const { initializeCheckout, stripeWebhook } = require('../controllers/payment.controller');
 
-// POST /api/payments/bkash/initiate
-router.post('/bkash/initiate', protect, async (req, res, next) => {
-  try {
-    // TODO: call bkash.service.js
-    const payment = await Payment.create({
-      user: req.user._id, course: req.body.courseId,
-      method: 'bkash', amount: req.body.amount, status: 'pending',
-    });
-    res.json({ success: true, paymentId: payment._id, message: 'bKash payment initiated' });
-  } catch (err) { next(err); }
-});
+// ─────────────────────────────────────────────────────────
+// Checkout Routing
+// ─────────────────────────────────────────────────────────
+router.post('/checkout', protect, initializeCheckout);
 
-// POST /api/payments/nagad/initiate
-router.post('/nagad/initiate', protect, async (req, res, next) => {
-  try {
-    const payment = await Payment.create({
-      user: req.user._id, course: req.body.courseId,
-      method: 'nagad', amount: req.body.amount, status: 'pending',
-    });
-    res.json({ success: true, paymentId: payment._id, message: 'Nagad payment initiated' });
-  } catch (err) { next(err); }
-});
-
-// POST /api/payments/stripe/initiate
-router.post('/stripe/initiate', protect, async (req, res) => {
-  res.json({ success: true, message: 'Stripe checkout session — integrate Stripe SDK here' });
-});
-
-// POST /api/payments/bank/submit
+// ─────────────────────────────────────────────────────────
+// Manual Bank Transfers
+// ─────────────────────────────────────────────────────────
 router.post('/bank/submit', protect, async (req, res, next) => {
   try {
     const payment = await Payment.create({
@@ -45,7 +25,16 @@ router.post('/bank/submit', protect, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// GET  /api/payments/history
+// ─────────────────────────────────────────────────────────
+// Webhooks (Must bypass JSON body parser if using Stripe raw body, handled in server.js)
+// ─────────────────────────────────────────────────────────
+// NOTE: For Stripe, the route in server.js should be configured to use express.raw() 
+// before it reaches this router.
+router.post('/webhook/stripe', express.raw({ type: 'application/json' }), stripeWebhook);
+
+// ─────────────────────────────────────────────────────────
+// User History
+// ─────────────────────────────────────────────────────────
 router.get('/history', protect, async (req, res, next) => {
   try {
     const payments = await Payment.find({ user: req.user._id }).populate('course', 'title slug');
@@ -53,7 +42,9 @@ router.get('/history', protect, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// PUT  /api/payments/:id/verify  — admin
+// ─────────────────────────────────────────────────────────
+// Admin Verification
+// ─────────────────────────────────────────────────────────
 router.put('/:id/verify', protect, authorize('admin'), async (req, res, next) => {
   try {
     const payment = await Payment.findByIdAndUpdate(
@@ -62,6 +53,7 @@ router.put('/:id/verify', protect, authorize('admin'), async (req, res, next) =>
       { new: true },
     );
     if (!payment) return res.status(404).json({ message: 'Payment not found' });
+    
     // Activate enrollment
     await Enrollment.findOneAndUpdate(
       { user: payment.user, course: payment.course },

@@ -1,14 +1,31 @@
 const mongoose = require('mongoose');
 
-const CertificateSchema = new mongoose.Schema(
+const certificateSchema = new mongoose.Schema(
   {
-    user:              { type: mongoose.Schema.Types.ObjectId, ref: 'User',   required: true },
-    course:            { type: mongoose.Schema.Types.ObjectId, ref: 'Course', required: true },
-    certificateUrl:    { type: String, required: true },
-    verificationCode:  { type: String, required: true, unique: true },
-    issuedAt:          { type: Date, default: Date.now },
+    student: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    course: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Course',
+      required: true,
+    },
+    issueDate: {
+      type: Date,
+      default: Date.now,
+    },
+    certificateUrl: {
+      type: String, // Optional: S3 / ImgBB link if stored externally
+    },
+    credentialId: {
+      type: String,
+      unique: true,
+      required: true,
+    },
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
-module.exports = mongoose.model('Certificate', CertificateSchema);
+module.exports = mongoose.model('Certificate', certificateSchema);
