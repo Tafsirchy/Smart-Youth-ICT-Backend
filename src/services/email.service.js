@@ -52,6 +52,22 @@ const emailService = {
       html:    `<h2>Congratulations ${user.name}!</h2><p>Download your certificate: <a href="${certificate.certificateUrl}">Click here</a></p>`,
     });
   },
+  /**
+   * Send a password reset link email.
+   */
+  sendPasswordReset: async (user, resetUrl) => {
+    await transporter.sendMail({
+      from:    `"Smart Youth ICT" <${process.env.MAIL_FROM}>`,
+      to:      user.email,
+      subject: '🔒 Password Reset Request — SYICT',
+      html:    `
+        <h2>Hi ${user.name},</h2>
+        <p>You requested a password reset. Click the link below to set a new password. This link expires in 1 hour.</p>
+        <p><a href="${resetUrl}" style="background:#2563eb;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">Reset My Password</a></p>
+        <p style="color:#6b7280;font-size:12px;margin-top:20px;">If you did not request this, please ignore this email. Your password will remain unchanged.</p>
+      `,
+    });
+  },
 };
 
 module.exports = emailService;

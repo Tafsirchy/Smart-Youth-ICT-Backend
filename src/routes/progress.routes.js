@@ -9,11 +9,14 @@ const {
 
 const router = express.Router();
 
+// All routes require authentication
 router.use(protect);
-router.use(authorize('student'));
 
+// GET routes — accessible by student, admin, and instructor
 router.get('/dashboard/stats', getDashboardStats);
 router.get('/:courseId', getProgress);
-router.put('/:courseId/complete-lesson', markLessonComplete);
+
+// PUT routes — student only (writing progress)
+router.put('/:courseId/complete-lesson', authorize('student'), markLessonComplete);
 
 module.exports = router;
