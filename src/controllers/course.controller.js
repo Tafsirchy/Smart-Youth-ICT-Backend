@@ -99,12 +99,44 @@ const createCourse = async (req, res, next) => {
 };
 
 /**
- * @desc    Enroll in a course stub
+ * @desc    Enroll a student in a course (post-payment)
  * @route   POST /api/courses/:id/enroll
  * @access  Private (Student)
  */
 const enrollCourse = async (req, res, next) => {
-  res.json({ success: true, message: 'Enroll endpoint — complete payment flow to activate' });
+  try {
+    const { id: courseId } = req.params;
+    const userId = req.user._id;
+
+    const course = await Course.findById(courseId);
+    if (!course) return res.status(404).json({ success: false, message: 'Course not found' });
+
+    // Check if already enrolled
+    const existing = await Enrollment.findOne({ user: userId, course: courseId });
+    if (existing) {
+      return res.status(409).json({ success: false, message: 'You are already enrolled in this course' });
+    }
+
+    // Create enrollment record
+    const enrollment = await Enrollment.create({
+      user:          userId,
+      course:        courseId,
+      paymentStatus: 'pending', // Payment gateway webhook will upgrade to 'paid'
+      isActive:      false,     // Activated after payment confirmed
+    });
+
+    // Attempt to send enrollment confirmation email (non-blocking)
+    try {
+      const emailService = require('../services/email.service');
+      await emailService.sendEnrollmentConfirm(req.user, course);
+    } catch (mailErr) {
+      console.error('Enrollment email failed:', mailErr.message);
+    }
+
+    res.status(201).json({ success: true, data: enrollment, message: 'Enrollment initiated. Complete payment to activate course access.' });
+  } catch (err) {
+    next(err);
+  }
 };
 
 module.exports = {
