@@ -39,13 +39,16 @@ const initializeCheckout = async (req, res, next) => {
     if (paymentMethod === 'card') {
       const successUrl = `${process.env.FRONTEND_URL}/student/payments/success?session_id={CHECKOUT_SESSION_ID}`;
       const cancelUrl = `${process.env.FRONTEND_URL}/courses/${course.slug}`;
-      paymentUrl = await stripeService.createCheckoutSession(course, user, successUrl, cancelUrl);
+      const sessionData = await stripeService.createCheckoutSession(amount, course.title?.en || course.title || 'Course', successUrl, cancelUrl);
+      paymentUrl = sessionData.url;
     } else if (paymentMethod === 'bkash') {
       const callbackUrl = `${process.env.FRONTEND_URL}/api/webhooks/bkash/callback`;
-      paymentUrl = await bkashService.createPaymentUrl(amount, invoiceNumber, callbackUrl);
+      const bkashData = await bkashService.createPayment(amount, invoiceNumber, callbackUrl);
+      paymentUrl = bkashData.bkashURL;
     } else if (paymentMethod === 'nagad') {
       const callbackUrl = `${process.env.FRONTEND_URL}/api/webhooks/nagad/callback`;
-      paymentUrl = await nagadService.createPaymentUrl(amount, invoiceNumber, callbackUrl);
+      const nagadData = await nagadService.createPayment(amount, invoiceNumber, callbackUrl);
+      paymentUrl = nagadData.paymentURL;
     } else if (paymentMethod === 'bank') {
       // Manual bank logic handles directly via frontend UI forms returning a pending approval state
       return res.status(200).json({ success: true, message: 'Bank details required', type: 'manual' });

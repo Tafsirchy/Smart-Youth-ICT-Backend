@@ -126,7 +126,7 @@ exports.downloadCertificate = async (req, res, next) => {
 
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': \`attachment; filename="SYICT_Certificate_\${certificate.credentialId}.pdf"\`
+      'Content-Disposition': 'attachment; filename="SYICT_Certificate_' + certificate.credentialId + '.pdf"'
     });
 
     res.send(pdfBuffer);
