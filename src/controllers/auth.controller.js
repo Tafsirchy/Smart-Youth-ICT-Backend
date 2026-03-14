@@ -143,14 +143,21 @@ const googleLogin = async (req, res, next) => {
 
     return sendAuthResponse(res, 200, user);
   } catch (err) {
-    if (
-      err.message?.includes("Wrong recipient") ||
-      err.message?.includes("Token used too late")
-    ) {
+    const tokenErrorMessage = err.message || "";
+    const isTokenVerificationError =
+      tokenErrorMessage.includes("Wrong recipient") ||
+      tokenErrorMessage.includes("Token used too late") ||
+      tokenErrorMessage.includes("Wrong number of segments") ||
+      tokenErrorMessage.includes("invalid") ||
+      tokenErrorMessage.includes("expired") ||
+      tokenErrorMessage.includes("verifyIdToken");
+
+    if (isTokenVerificationError) {
       return res
         .status(401)
         .json({ message: "Google token is invalid or expired" });
     }
+
     next(err);
   }
 };
