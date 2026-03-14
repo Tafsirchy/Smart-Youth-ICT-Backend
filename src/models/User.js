@@ -52,15 +52,14 @@ const UserSchema = new mongoose.Schema(
 );
 
 // Hash password before save
-UserSchema.pre("save", async function (next) {
+UserSchema.pre("save", async function () {
   this.providers = [...new Set((this.providers || []).filter(Boolean))];
 
-  if (!this.isModified("password")) return next();
-  if (!this.password) return next();
+  if (!this.isModified("password")) return;
+  if (!this.password) return;
 
   this.password = await bcrypt.hash(this.password, 12);
   if (!this.isNew) this.passwordChangedAt = new Date();
-  next();
 });
 
 // Compare password method

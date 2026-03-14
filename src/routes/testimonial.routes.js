@@ -1,22 +1,29 @@
-const express = require('express');
-const router  = express.Router();
-const { protect } = require('../middleware/auth.middleware');
-const { authorize } = require('../middleware/role.middleware');
+const express = require("express");
+const router = express.Router();
+const { protect } = require("../middleware/auth.middleware");
+const { authorize } = require("../middleware/role.middleware");
 const {
   getTestimonials,
   createTestimonial,
+  updateTestimonialStatus,
   approveTestimonial,
   deleteTestimonial,
-} = require('../controllers/testimonial.controller');
+} = require("../controllers/testimonial.controller");
 
 // Public
-router.get('/', getTestimonials);
+router.get("/", getTestimonials);
 
 // Student — submit testimonial
-router.post('/', protect, authorize('student'), createTestimonial);
+router.post("/", protect, authorize("student"), createTestimonial);
 
 // Admin — approve / delete
-router.patch('/:id/approve', protect, authorize('admin'), approveTestimonial);
-router.delete('/:id',        protect, authorize('admin'), deleteTestimonial);
+router.patch(
+  "/:id/status",
+  protect,
+  authorize("admin"),
+  updateTestimonialStatus,
+);
+router.patch("/:id/approve", protect, authorize("admin"), approveTestimonial);
+router.delete("/:id", protect, authorize("admin"), deleteTestimonial);
 
 module.exports = router;

@@ -1,8 +1,17 @@
 const jwt = require("jsonwebtoken");
 
 const buildPayload = (userOrPayload) => {
-  if (userOrPayload?.id || userOrPayload?.ver !== undefined)
-    return userOrPayload;
+  if (
+    userOrPayload &&
+    userOrPayload.ver !== undefined &&
+    userOrPayload._id === undefined &&
+    userOrPayload.tokenVersion === undefined
+  ) {
+    return {
+      id: userOrPayload.id,
+      ver: userOrPayload.ver,
+    };
+  }
 
   return {
     id: userOrPayload._id?.toString() || userOrPayload.id,
