@@ -1,5 +1,5 @@
 const express = require('express');
-const { getGlobalStats, getAllBranchesDetails } = require('../controllers/super.controller');
+const { getGlobalStats, getAllBranchesDetails, deployMasterCourse, getGlobalFinanceReport, onboardBranch } = require('../controllers/super.controller');
 const { protect } = require('../middleware/auth.middleware');
 const { authorize } = require('../middleware/role.middleware');
 

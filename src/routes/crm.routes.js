@@ -12,8 +12,8 @@ const {
 const { protect }   = require('../middleware/auth.middleware');
 const { authorize } = require('../middleware/role.middleware');
 
-// All CRM routes — Admin only
-router.use(protect, authorize('admin'));
+// All CRM routes — Admin & Super Admin
+router.use(protect, authorize('super_admin', 'branch_admin', 'admin'));
 
 router.get('/stats',     getCRMStats);
 router.get('/',          getLeads);
