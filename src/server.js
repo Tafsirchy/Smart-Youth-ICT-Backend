@@ -25,6 +25,12 @@ const portfolioRoutes   = require('./routes/portfolio.routes');
 const affiliateRoutes   = require('./routes/affiliate.routes');
 const crmRoutes         = require('./routes/crm.routes');
 const seminarRoutes     = require('./routes/seminar.routes');
+const branchRoutes      = require('./routes/branch.routes');
+const sessionRoutes     = require('./routes/session.routes');
+const assetRoutes       = require('./routes/asset.routes');
+const invoiceRoutes     = require('./routes/invoice.routes');
+const notificationRoutes = require('./routes/notification.routes');
+const superRoutes        = require('./routes/super.routes');
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -67,6 +73,12 @@ app.use(`${API}/portfolio`,    portfolioRoutes);
 app.use(`${API}/affiliate`,    affiliateRoutes);
 app.use(`${API}/crm`,          crmRoutes);
 app.use(`${API}/seminar`,      seminarRoutes);
+app.use(`${API}/branches`,     branchRoutes);
+app.use(`${API}/sessions`,     sessionRoutes);
+app.use(`${API}/assets`,       assetRoutes);
+app.use(`${API}/invoices`,     invoiceRoutes);
+app.use(`${API}/notifications`, notificationRoutes);
+app.use(`${API}/super`,         superRoutes);
 
 // ─── Health check ────────────────────────────────────────────────
 app.get('/health', (_, res) => res.json({ status: 'ok', ts: new Date() }));

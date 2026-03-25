@@ -19,6 +19,7 @@ const serializeUser = (user) => ({
   bio: user.bio,
   providers: user.providers,
   isVerified: user.isVerified,
+  branchId: user.branchId,
 });
 
 const sendAuthResponse = (res, statusCode, user) => {
@@ -35,7 +36,7 @@ const sendAuthResponse = (res, statusCode, user) => {
 // POST /api/auth/register
 const register = async (req, res, next) => {
   try {
-    const { name, phone, password } = req.body;
+    const { name, phone, password, branchId } = req.body;
     const email = normalizeEmail(req.body.email);
     const existing = await User.findOne({ email });
     if (existing) {
@@ -55,6 +56,7 @@ const register = async (req, res, next) => {
       phone: phone.trim(),
       password,
       providers: ["credentials"],
+      branchId,
     });
 
     return sendAuthResponse(res, 201, user);
@@ -97,7 +99,7 @@ const googleLogin = async (req, res, next) => {
         .json({ message: "Google sign-in is not configured" });
     }
 
-    const { idToken, phone, name } = req.body;
+    const { idToken, phone, name, branchId } = req.body;
     const ticket = await googleClient.verifyIdToken({
       idToken,
       audience: process.env.GOOGLE_CLIENT_ID,
@@ -128,6 +130,7 @@ const googleLogin = async (req, res, next) => {
         googleId: payload.sub,
         providers: ["google"],
         isVerified: true,
+        branchId,
       });
     } else {
       user.email = email;

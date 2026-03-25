@@ -11,6 +11,7 @@ const LeadCRMSchema = new mongoose.Schema(
     notes:         [{ text: String, createdAt: { type: Date, default: Date.now } }],
     followUpDate:  Date,
     assignedTo:    { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    branchId:      { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', required: true, index: true },
   },
   { timestamps: true },
 );

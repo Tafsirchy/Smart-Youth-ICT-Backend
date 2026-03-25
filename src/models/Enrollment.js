@@ -8,6 +8,7 @@ const EnrollmentSchema = new mongoose.Schema(
     installmentsPaid:  { type: Number, default: 0 },
     expiresAt:         Date,
     referredBy:        { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    branchId:          { type: mongoose.Schema.Types.ObjectId, ref: 'Branch' },
   },
   { timestamps: true },
 );

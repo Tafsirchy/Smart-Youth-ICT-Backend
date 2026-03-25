@@ -10,9 +10,13 @@ const slugify = require('slugify');
  */
 const getCourses = async (req, res, next) => {
   try {
-    const { category, page = 1, limit = 12 } = req.query;
+    const { category, page = 1, limit = 12, branchId, isMaster } = req.query;
     const filter = { isPublished: true };
     if (category) filter.category = category;
+    
+    // Multi-tenant filtering
+    if (branchId) filter.branchId = branchId;
+    if (isMaster !== undefined) filter.isMaster = isMaster === 'true';
 
     const courses = await Course.find(filter)
       .populate('instructor', 'name avatar')
@@ -83,8 +87,14 @@ const createCourse = async (req, res, next) => {
       ...req.body,
       slug,
       instructor: req.user._id,
-      thumbnail: thumbnailUrl || req.body.thumbnail, // use uploaded URL or fallback to string in body
+      branchId: req.user.role === 'super_admin' ? (req.body.branchId || null) : req.user.branchId,
+      thumbnail: thumbnailUrl || req.body.thumbnail, 
     };
+
+    // If super_admin, they can create master templates
+    if (req.user.role === 'super_admin' && req.body.isMaster) {
+      courseData.isMaster = true;
+    }
 
     // If body fields come as strings from form-data, we might need to parse them
     if (typeof courseData.title === 'string') courseData.title = JSON.parse(courseData.title);
@@ -121,8 +131,9 @@ const enrollCourse = async (req, res, next) => {
     const enrollment = await Enrollment.create({
       user:          userId,
       course:        courseId,
-      paymentStatus: 'pending', // Payment gateway webhook will upgrade to 'paid'
-      isActive:      false,     // Activated after payment confirmed
+      branchId:      course.branchId, // Inherit branch from course
+      paymentStatus: 'pending', 
+      isActive:      false,     
     });
 
     // Attempt to send enrollment confirmation email (non-blocking)

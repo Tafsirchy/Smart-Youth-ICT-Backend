@@ -10,6 +10,10 @@ const getLeads = async (req, res, next) => {
     const { page = 1, limit = 20, status, source, q } = req.query;
 
     const filter = {};
+    if (req.user.role !== 'super_admin') {
+      filter.branchId = req.user.branchId;
+    }
+
     if (status && status !== 'all') filter.status = status;
     if (source && source !== 'all') filter.source = source;
     if (q) filter.$or = [
@@ -40,6 +44,12 @@ const getLeadById = async (req, res, next) => {
   try {
     const lead = await LeadCRM.findById(req.params.id).populate('assignedTo', 'name');
     if (!lead) return res.status(404).json({ success: false, message: 'Lead not found' });
+
+    // Isolation check
+    if (req.user.role !== 'super_admin' && lead.branchId?.toString() !== req.user.branchId?.toString()) {
+      return res.status(403).json({ success: false, message: 'Unauthorized branch access' });
+    }
+
     res.json({ success: true, data: lead });
   } catch (err) {
     next(err);
@@ -54,8 +64,14 @@ const getLeadById = async (req, res, next) => {
 const createLead = async (req, res, next) => {
   try {
     const { name, phone, email, source, interest, status, followUpDate, assignedTo } = req.body;
+    const branchId = req.user.branchId;
+
+    if (!branchId && req.user.role !== 'super_admin') {
+      return res.status(400).json({ success: false, message: 'Branch ID required' });
+    }
+
     const lead = await LeadCRM.create({
-      name, phone, email, source, interest, status, followUpDate, assignedTo,
+      name, phone, email, source, interest, status, followUpDate, assignedTo, branchId
     });
     res.status(201).json({ success: true, data: lead });
   } catch (err) {
@@ -70,12 +86,18 @@ const createLead = async (req, res, next) => {
  */
 const updateLead = async (req, res, next) => {
   try {
-    const lead = await LeadCRM.findByIdAndUpdate(
+    let lead = await LeadCRM.findById(req.params.id);
+    if (!lead) return res.status(404).json({ success: false, message: 'Lead not found' });
+
+    if (req.user.role !== 'super_admin' && lead.branchId?.toString() !== req.user.branchId?.toString()) {
+        return res.status(403).json({ success: false, message: 'Unauthorized branch access' });
+    }
+
+    lead = await LeadCRM.findByIdAndUpdate(
       req.params.id,
       { $set: req.body },
       { new: true, runValidators: true }
     ).populate('assignedTo', 'name');
-    if (!lead) return res.status(404).json({ success: false, message: 'Lead not found' });
     res.json({ success: true, data: lead });
   } catch (err) {
     next(err);
@@ -127,7 +149,11 @@ const deleteLead = async (req, res, next) => {
 const getCRMStats = async (req, res, next) => {
   try {
     const statuses = ['new', 'contacted', 'interested', 'enrolled', 'cold', 'lost'];
+    const filter = {};
+    if (req.user.role !== 'super_admin') filter.branchId = req.user.branchId;
+
     const statsArr = await LeadCRM.aggregate([
+      { $match: filter },
       { $group: { _id: '$status', count: { $sum: 1 } } }
     ]);
     const stats = {};

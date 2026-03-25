@@ -10,6 +10,9 @@ const CourseSchema = new mongoose.Schema(
   {
     title:         { bn: String, en: String },
     slug:          { type: String, required: true, unique: true },
+    branchId:      { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', index: true },
+    isMaster:      { type: Boolean, default: false },
+    masterCourseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
     description:   { bn: String, en: String },
     category:      { type: String, enum: ['web-dev','graphic-design','smm','ai','other'], required: true },
     instructor:    { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },

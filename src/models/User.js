@@ -29,9 +29,10 @@ const UserSchema = new mongoose.Schema(
     googleId: { type: String, unique: true, sparse: true, index: true },
     role: {
       type: String,
-      enum: ["student", "instructor", "admin"],
+      enum: ["student", "instructor", "branch_admin", "branch_management", "super_admin", "parent"],
       default: "student",
     },
+    branchId: { type: mongoose.Schema.Types.ObjectId, ref: "Branch", index: true },
     language: { type: String, enum: ["bn", "en"], default: "bn" },
     avatar: { type: String, default: "" },
     bio: { type: String, default: "", trim: true, maxlength: 500 },
