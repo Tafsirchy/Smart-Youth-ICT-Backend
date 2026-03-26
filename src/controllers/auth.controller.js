@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const { OAuth2Client } = require("google-auth-library");
 const User = require("../models/User");
+const Branch = require("../models/Branch");
 const emailService = require("../services/email.service");
 const { generateToken } = require("../utils/jwt");
 
@@ -50,13 +51,19 @@ const register = async (req, res, next) => {
       });
     }
 
+    let assignedBranch = branchId;
+    if (!assignedBranch) {
+      const firstBranch = await Branch.findOne().sort({ createdAt: 1 });
+      if (firstBranch) assignedBranch = firstBranch._id;
+    }
+
     const user = await User.create({
       name: name.trim(),
       email,
       phone: phone.trim(),
       password,
       providers: ["credentials"],
-      branchId,
+      branchId: assignedBranch,
     });
 
     return sendAuthResponse(res, 201, user);

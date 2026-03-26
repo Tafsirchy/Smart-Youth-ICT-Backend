@@ -19,6 +19,7 @@ const CourseSchema = new mongoose.Schema(
     thumbnail:     { type: String, default: '' },
     previewVideo:  { type: String, default: '' },
     price:         { type: Number, required: true },
+    originalPrice: { type: Number, default: null },  // crossed-out "was" price for discounts
     installmentPlan: {
       enabled:  { type: Boolean, default: false },
       parts:    { type: Number, default: 2 },
