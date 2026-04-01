@@ -59,7 +59,6 @@ const CourseSchema = new mongoose.Schema(
     isPublished:   { type: Boolean, default: false },
     isDeleted:     { type: Boolean, default: false }, // Soft Delete flag
     totalStudents: { type: Number, default: 0 },
-    rating:        { type: Number, default: 0 },
   },
   { timestamps: true },
 );
