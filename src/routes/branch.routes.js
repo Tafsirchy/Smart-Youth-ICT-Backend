@@ -6,7 +6,7 @@ const { authorize, authorizeBranch } = require('../middleware/role.middleware');
 const router = express.Router({ mergeParams: true });
 
 router.use(protect);
-router.use(authorize('super_admin', 'branch_admin', 'branch_management'));
+router.use(authorize('super_admin', 'super_management', 'branch_admin', 'branch_management'));
 router.use(authorizeBranch);
 
 router.get('/stats', getBranchStats);

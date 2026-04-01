@@ -9,7 +9,7 @@ const NotificationSchema = new mongoose.Schema(
     message:     { type: String, required: true },
     
     type:        { type: String, enum: ['info', 'success', 'warning', 'error'], default: 'info' },
-    targetRole:  { type: String, enum: ['student', 'instructor', 'branch_management', 'branch_admin', 'super_admin', 'parent', 'all'], default: 'all' },
+    targetRole:  { type: String, enum: ['student', 'instructor', 'branch_management', 'branch_admin', 'super_admin', 'super_management', 'all'], default: 'all' },
     
     link:        String, // Optional URL to navigate to
     isRead:      { type: Boolean, default: false },

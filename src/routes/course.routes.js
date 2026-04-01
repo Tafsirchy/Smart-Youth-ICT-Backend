@@ -8,7 +8,9 @@ const {
   getCourseBySlug,
   getEnrolledCourses,
   createCourse,
-  enrollCourse
+  enrollCourse,
+  updateCourse,
+  deleteCourse
 } = require('../controllers/course.controller');
 
 // GET  /api/courses            — public
@@ -23,8 +25,15 @@ router.get('/:slug', getCourseBySlug);
 // POST /api/courses/:id/enroll — student
 router.post('/:id/enroll', protect, enrollCourse);
 
-// POST /api/courses            — admin/instructor
-// Uses multer `upload.single('thumbnail')` to parse form-data and attach file
-router.post('/', protect, authorize('admin', 'instructor'), upload.single('thumbnail'), createCourse);
+const courseManagers = ['super_admin', 'super_management', 'admin', 'branch_admin', 'branch_management', 'instructor'];
+
+// POST /api/courses            — auth
+router.post('/', protect, authorize(...courseManagers), upload.single('thumbnail'), createCourse);
+
+// PUT /api/courses/:id
+router.put('/:id', protect, authorize(...courseManagers), upload.single('thumbnail'), updateCourse);
+
+// DELETE /api/courses/:id
+router.delete('/:id', protect, authorize(...courseManagers), deleteCourse);
 
 module.exports = router;

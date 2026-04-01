@@ -4,6 +4,24 @@ const CurriculumItemSchema = new mongoose.Schema({
   title:      { type: String, required: true },
   duration:   String,
   isFree:     { type: Boolean, default: false },
+  topics:     [String], // Array of sub-topics/lessons
+}, { _id: false });
+
+const FeatureSchema = new mongoose.Schema({
+  iconKey: String, // E.g. 'FaLaptopCode', mapped on frontend
+  text: String,
+}, { _id: false });
+
+const ProjectSchema = new mongoose.Schema({
+  title: String,
+  desc: String,
+  techs: [String],
+  image: String, // URL
+}, { _id: false });
+
+const FAQSchema = new mongoose.Schema({
+  question: String,
+  answer: String,
 }, { _id: false });
 
 const CourseSchema = new mongoose.Schema(
@@ -14,6 +32,18 @@ const CourseSchema = new mongoose.Schema(
     isMaster:      { type: Boolean, default: false },
     masterCourseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
     description:   { bn: String, en: String },
+    tagline:       { type: String, default: '' },
+    outcomes:      [String],
+    targetAudience:[String],
+    language:      { type: String, default: 'Bengali / English' },
+    mode:          { type: String, default: 'Online / Hybrid' },
+    features:      [FeatureSchema],
+    faqs:          [FAQSchema],
+    projects:      [ProjectSchema],
+    certification: {
+      included: { type: Boolean, default: true },
+      desc: { type: String, default: "Earn an industry-recognized certificate upon passing all modules and assignments." }
+    },
     category:      { type: String, enum: ['web-dev','graphic-design','smm','ai','other'], required: true },
     instructor:    { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     thumbnail:     { type: String, default: '' },
@@ -27,6 +57,7 @@ const CourseSchema = new mongoose.Schema(
     duration:      String,   // e.g. "6 Months"
     curriculum:    [CurriculumItemSchema],
     isPublished:   { type: Boolean, default: false },
+    isDeleted:     { type: Boolean, default: false }, // Soft Delete flag
     totalStudents: { type: Number, default: 0 },
     rating:        { type: Number, default: 0 },
   },

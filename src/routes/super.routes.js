@@ -6,7 +6,7 @@ const { authorize } = require('../middleware/role.middleware');
 const router = express.Router();
 
 router.use(protect);
-router.use(authorize('super_admin')); // Strictly for Super Admins
+router.use(authorize('super_admin', 'super_management'));
 
 router.get('/stats',    getGlobalStats);
 router.get('/branches', getAllBranchesDetails);

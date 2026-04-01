@@ -8,7 +8,7 @@ const router = express.Router();
 router.use(protect);
 
 router.get('/',  getAssets);
-router.post('/', authorize('admin', 'branch_admin', 'branch_management', 'super_admin'), createAsset);
-router.patch('/:id', authorize('admin', 'branch_admin', 'branch_management', 'super_admin'), updateAsset);
+router.post('/', authorize('super_admin', 'super_management', 'admin', 'branch_admin', 'branch_management'), createAsset);
+router.patch('/:id', authorize('super_admin', 'super_management', 'admin', 'branch_admin', 'branch_management'), updateAsset);
 
 module.exports = router;

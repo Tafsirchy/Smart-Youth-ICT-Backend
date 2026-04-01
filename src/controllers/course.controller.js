@@ -10,8 +10,13 @@ const slugify = require('slugify');
  */
 const getCourses = async (req, res, next) => {
   try {
-    const { category, page = 1, limit = 12, branchId, isMaster } = req.query;
-    const filter = { isPublished: true };
+    const { category, page = 1, limit = 12, branchId, isMaster, includeUnpublished } = req.query;
+    
+    // Default filter for public endpoints
+    const filter = { isDeleted: false };
+    if (includeUnpublished !== 'true') {
+      filter.isPublished = true;
+    }
     if (category) filter.category = category;
     
     // Multi-tenant filtering
@@ -96,9 +101,25 @@ const createCourse = async (req, res, next) => {
       courseData.isMaster = true;
     }
 
-    // If body fields come as strings from form-data, we might need to parse them
-    if (typeof courseData.title === 'string') courseData.title = JSON.parse(courseData.title);
-    if (typeof courseData.price === 'string') courseData.price = Number(courseData.price);
+    // Parse complex JSON structures sent via form-data
+    const parseField = (field) => {
+      try { return typeof field === 'string' ? JSON.parse(field) : field; } 
+      catch { return field; }
+    };
+
+    courseData.title = parseField(courseData.title);
+    courseData.description = parseField(courseData.description);
+    if (courseData.price) courseData.price = Number(courseData.price);
+    if (courseData.originalPrice) courseData.originalPrice = Number(courseData.originalPrice);
+    
+    courseData.curriculum = parseField(courseData.curriculum);
+    courseData.outcomes = parseField(courseData.outcomes);
+    courseData.targetAudience = parseField(courseData.targetAudience);
+    courseData.features = parseField(courseData.features);
+    courseData.faqs = parseField(courseData.faqs);
+    courseData.projects = parseField(courseData.projects);
+    courseData.installmentPlan = parseField(courseData.installmentPlan);
+    courseData.certification = parseField(courseData.certification);
     
     // Create the course
     const course = await Course.create(courseData);
@@ -150,10 +171,87 @@ const enrollCourse = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Update course details
+ * @route   PUT /api/courses/:id
+ * @access  Private (Admin/Instructor)
+ */
+const updateCourse = async (req, res, next) => {
+  try {
+    let course = await Course.findById(req.params.id);
+    if (!course) return res.status(404).json({ success: false, message: 'Course not found' });
+
+    // Authorization check
+    if (req.user.role === 'instructor' && course.instructor.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Cannot edit a course you do not own' });
+    }
+
+    let thumbnailUrl = course.thumbnail;
+    if (req.file) {
+      // If new file is uploaded
+      thumbnailUrl = await uploadToImageBB(req.file.buffer);
+    }
+
+    const courseData = { ...req.body, thumbnail: thumbnailUrl || req.body.thumbnail };
+
+    // JSON parse form-data fields securely
+    const parseField = (field) => {
+      if (!field) return field;
+      try { return typeof field === 'string' ? JSON.parse(field) : field; } 
+      catch { return field; }
+    };
+
+    if (courseData.title !== undefined) courseData.title = parseField(courseData.title);
+    if (courseData.description !== undefined) courseData.description = parseField(courseData.description);
+    if (courseData.price !== undefined) courseData.price = Number(courseData.price);
+    if (courseData.originalPrice !== undefined) courseData.originalPrice = Number(courseData.originalPrice);
+    
+    if (courseData.curriculum !== undefined) courseData.curriculum = parseField(courseData.curriculum);
+    if (courseData.outcomes !== undefined) courseData.outcomes = parseField(courseData.outcomes);
+    if (courseData.targetAudience !== undefined) courseData.targetAudience = parseField(courseData.targetAudience);
+    if (courseData.features !== undefined) courseData.features = parseField(courseData.features);
+    if (courseData.faqs !== undefined) courseData.faqs = parseField(courseData.faqs);
+    if (courseData.projects !== undefined) courseData.projects = parseField(courseData.projects);
+    if (courseData.installmentPlan !== undefined) courseData.installmentPlan = parseField(courseData.installmentPlan);
+    if (courseData.certification !== undefined) courseData.certification = parseField(courseData.certification);
+
+    course = await Course.findByIdAndUpdate(req.params.id, courseData, { new: true, runValidators: true });
+    res.json({ success: true, data: course, message: 'Course updated successfully' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * @desc    Soft delete a course
+ * @route   DELETE /api/courses/:id
+ * @access  Private (Admin/Instructor)
+ */
+const deleteCourse = async (req, res, next) => {
+  try {
+    const course = await Course.findById(req.params.id);
+    if (!course) return res.status(404).json({ success: false, message: 'Course not found' });
+
+    if (req.user.role === 'instructor' && course.instructor.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Cannot delete a course you do not own' });
+    }
+
+    course.isDeleted = true;
+    course.isPublished = false;
+    await course.save();
+
+    res.json({ success: true, message: 'Course safely removed (soft delete).' });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getCourses,
   getCourseBySlug,
   getEnrolledCourses,
   createCourse,
   enrollCourse,
+  updateCourse,
+  deleteCourse,
 };

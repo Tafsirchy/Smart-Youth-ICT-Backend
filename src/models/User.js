@@ -29,7 +29,7 @@ const UserSchema = new mongoose.Schema(
     googleId: { type: String, unique: true, sparse: true, index: true },
     role: {
       type: String,
-      enum: ["student", "instructor", "branch_admin", "branch_management", "super_admin", "parent"],
+      enum: ["student", "instructor", "branch_admin", "branch_management", "super_admin", "super_management"],
       default: "student",
     },
     branchId: { type: mongoose.Schema.Types.ObjectId, ref: "Branch", index: true },

@@ -6,7 +6,7 @@ const authorize = (...roles) => (req, res, next) => {
 };
 
 const authorizeBranch = (req, res, next) => {
-  if (req.user?.role === "super_admin") return next();
+  if (req.user?.role === "super_admin" || req.user?.role === "super_management") return next();
   
   const targetBranch = req.params.branchId || req.body.branchId || req.query.branchId;
   if (!targetBranch) {

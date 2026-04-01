@@ -8,7 +8,7 @@ const router = express.Router();
 router.use(protect);
 
 router.get('/',  getInvoices);
-router.post('/', authorize('admin', 'branch_admin', 'super_admin'), createInvoice);
-router.patch('/:id', authorize('admin', 'branch_admin', 'super_admin'), updateInvoice);
+router.post('/', authorize('super_admin', 'super_management', 'admin', 'branch_admin'), createInvoice);
+router.patch('/:id', authorize('super_admin', 'super_management', 'admin', 'branch_admin'), updateInvoice);
 
 module.exports = router;

@@ -7,7 +7,7 @@ const router = express.Router();
 
 router.use(protect);
 
-router.get('/',  authorize('admin', 'branch_admin', 'branch_management', 'super_admin'), getEnrollments);
+router.get('/',  authorize('super_admin', 'super_management', 'admin', 'branch_admin', 'branch_management'), getEnrollments);
 router.post('/', authorize('admin', 'branch_admin', 'super_admin'), createEnrollment);
 router.get('/:id', getEnrollment);
 
