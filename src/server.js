@@ -30,7 +30,10 @@ const sessionRoutes     = require('./routes/session.routes');
 const assetRoutes       = require('./routes/asset.routes');
 const invoiceRoutes     = require('./routes/invoice.routes');
 const notificationRoutes = require('./routes/notification.routes');
+const instructorRoutes   = require('./routes/instructor.routes');
 const superRoutes        = require('./routes/super.routes');
+
+const supportRoutes      = require('./routes/support.routes');
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -79,6 +82,8 @@ app.use(`${API}/assets`,       assetRoutes);
 app.use(`${API}/invoices`,     invoiceRoutes);
 app.use(`${API}/notifications`, notificationRoutes);
 app.use(`${API}/super`,         superRoutes);
+app.use(`${API}/support`,       supportRoutes);
+
 
 // ─── Health check ────────────────────────────────────────────────
 app.get('/health', (_, res) => res.json({ status: 'ok', ts: new Date() }));

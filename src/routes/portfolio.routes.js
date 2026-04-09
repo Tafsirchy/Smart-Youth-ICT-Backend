@@ -4,7 +4,9 @@ const {
   getMyPortfolio,
   updatePortfolio,
   addPortfolioProject,
-  getPortfolioByUsername
+  getPortfolioByUsername,
+  updatePortfolioProject,
+  deletePortfolioProject
 } = require('../controllers/portfolio.controller');
 
 const router = express.Router();
@@ -17,5 +19,7 @@ router.use('/me', protect);
 router.get('/me', getMyPortfolio);
 router.put('/me', updatePortfolio);
 router.post('/me/projects', addPortfolioProject);
+router.put('/me/projects/:projectId', updatePortfolioProject);
+router.delete('/me/projects/:projectId', deletePortfolioProject);
 
 module.exports = router;

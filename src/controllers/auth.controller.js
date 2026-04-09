@@ -263,6 +263,29 @@ const updateProfile = async (req, res, next) => {
   }
 };
 
+// PUT /api/auth/password
+const updatePassword = async (req, res, next) => {
+  try {
+    const { oldPassword, newPassword } = req.body;
+    if (!oldPassword || !newPassword) {
+      return res.status(400).json({ message: "Current and new password are required" });
+    }
+
+    const user = await User.findById(req.user._id).select("+password");
+    if (!(await user.comparePassword(oldPassword))) {
+      return res.status(401).json({ message: "Invalid current password" });
+    }
+
+    user.password = newPassword;
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
+    await user.save();
+
+    res.json({ success: true, message: "Password updated successfully" });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -271,4 +294,6 @@ module.exports = {
   forgotPassword,
   resetPassword,
   updateProfile,
+  updatePassword,
 };
+

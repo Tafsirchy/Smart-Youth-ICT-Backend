@@ -61,6 +61,47 @@ const initializeCheckout = async (req, res, next) => {
 };
 
 /**
+ * @desc    Get all payments (Admin/Branch Admin)
+ * @route   GET /api/payments
+ * @access  Private
+ */
+const getPayments = async (req, res, next) => {
+  try {
+    const { branchId, status, page = 1, limit = 20 } = req.query;
+    const query = {};
+
+    if (status) query.status = status;
+    if (branchId) query.branchId = branchId;
+    // Branch admins should only see their branch's payments
+    if (['branch_admin', 'branch_management'].includes(req.user.role)) {
+      query.branchId = req.user.branchId;
+    }
+
+    const skip = (page - 1) * limit;
+
+    const payments = await Payment.find(query)
+      .populate('user', 'name email avatar')
+      .populate('course', 'title slug')
+      .sort('-createdAt')
+      .skip(Number(skip))
+      .limit(Number(limit));
+
+    const total = await Payment.countDocuments(query);
+
+    res.status(200).json({
+      success: true,
+      count: payments.length,
+      total,
+      page: Number(page),
+      limit: Number(limit),
+      data: payments
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * @desc    Stripe Webhook Receiver
  * @route   POST /api/payments/webhook/stripe
  * @access  Public
@@ -91,5 +132,6 @@ const stripeWebhook = async (req, res) => {
 
 module.exports = {
   initializeCheckout,
-  stripeWebhook
+  stripeWebhook,
+  getPayments
 };

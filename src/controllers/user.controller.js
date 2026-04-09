@@ -73,3 +73,30 @@ exports.toggleUserStatus = async (req, res, next) => {
     res.json({ success: true, message: `User ${user.isActive ? 'activated' : 'deactivated'}`, isActive: user.isActive });
   } catch (err) { next(err); }
 };
+
+// @desc    Update user role (super admin only)
+// @route   PUT /api/users/:id/role
+// @access  Private (super_admin)
+exports.updateUserRole = async (req, res, next) => {
+  try {
+    const { role } = req.body;
+    
+    // Prevent updating a user to a non-existent role
+    const validRoles = ['student', 'instructor', 'branch_admin', 'branch_management', 'super_admin', 'super_management'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ success: false, message: 'Invalid role provided' });
+    }
+
+    // Prevent changing your own role
+    if (req.user._id.toString() === req.params.id) {
+      return res.status(400).json({ success: false, message: 'You cannot change your own role' });
+    }
+
+    const user = await User.findByIdAndUpdate(req.params.id, { role }, { new: true, runValidators: true })
+      .select('-password -resetToken -resetExpiry');
+
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    
+    res.json({ success: true, data: user, message: 'Role updated successfully' });
+  } catch (err) { next(err); }
+};

@@ -10,6 +10,7 @@ const { initializeCheckout, stripeWebhook } = require('../controllers/payment.co
 // Checkout Routing
 // ─────────────────────────────────────────────────────────
 router.post('/checkout', protect, initializeCheckout);
+router.get('/', protect, authorize('super_admin', 'branch_admin'), require('../controllers/payment.controller').getPayments);
 
 // ─────────────────────────────────────────────────────────
 // Manual Bank Transfers
@@ -43,23 +44,38 @@ router.get('/history', protect, async (req, res, next) => {
 });
 
 // ─────────────────────────────────────────────────────────
-// Admin Verification
+// Admin Verification & Rejection
 // ─────────────────────────────────────────────────────────
-router.put('/:id/verify', protect, authorize('admin'), async (req, res, next) => {
+router.put('/:id/verify', protect, authorize('super_admin', 'super_management', 'branch_admin', 'branch_management'), async (req, res, next) => {
   try {
+    const { status, note } = req.body; // status should be 'completed' or 'failed'
+    
+    if (!['completed', 'failed'].includes(status)) {
+      return res.status(400).json({ message: 'Invalid status for verification' });
+    }
+
     const payment = await Payment.findByIdAndUpdate(
       req.params.id,
-      { status: 'completed', verifiedBy: req.user._id, verifiedAt: new Date(), adminNote: req.body.note },
+      { status, verifiedBy: req.user._id, verifiedAt: new Date(), adminNote: note },
       { new: true },
     );
     if (!payment) return res.status(404).json({ message: 'Payment not found' });
     
-    // Activate enrollment
-    await Enrollment.findOneAndUpdate(
-      { user: payment.user, course: payment.course },
-      { paymentStatus: 'paid' },
-      { upsert: true, new: true },
-    );
+    if (status === 'completed') {
+      // Activate enrollment
+      await Enrollment.findOneAndUpdate(
+        { user: payment.user, course: payment.course },
+        { paymentStatus: 'paid' },
+        { upsert: true, new: true },
+      );
+    } else if (status === 'failed') {
+      // Mark enrollment as failed if it exists
+      await Enrollment.findOneAndUpdate(
+        { user: payment.user, course: payment.course },
+        { paymentStatus: 'failed' }
+      );
+    }
+
     res.json({ success: true, data: payment });
   } catch (err) { next(err); }
 });

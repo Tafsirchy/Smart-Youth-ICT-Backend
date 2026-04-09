@@ -77,3 +77,23 @@ exports.createEnrollment = async (req, res, next) => {
     next(err);
   }
 };
+
+// @desc    Get current student's enrollments
+// @route   GET /api/enrollments/me
+// @access  Private (Student)
+exports.getMyEnrollments = async (req, res, next) => {
+  try {
+    const enrollments = await Enrollment.find({ user: req.user._id })
+      .populate('course', 'title price category')
+      .sort('-createdAt');
+
+    res.json({
+      success: true,
+      count: enrollments.length,
+      data: enrollments
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+

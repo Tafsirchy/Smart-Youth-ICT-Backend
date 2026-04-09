@@ -70,6 +70,60 @@ exports.addPortfolioProject = async (req, res, next) => {
   }
 };
 
+// @desc    Update a project in portfolio
+// @route   PUT /api/portfolio/me/projects/:projectId
+// @access  Private
+exports.updatePortfolioProject = async (req, res, next) => {
+  try {
+    const portfolio = await Portfolio.findOne({ student: req.user._id });
+    if (!portfolio) {
+      return res.status(404).json({ success: false, message: 'Portfolio not found' });
+    }
+
+    const projectIndex = portfolio.projects.findIndex(
+      (p) => p._id.toString() === req.params.projectId
+    );
+
+    if (projectIndex === -1) {
+      return res.status(404).json({ success: false, message: 'Project not found in portfolio' });
+    }
+
+    // Update the project fields
+    portfolio.projects[projectIndex] = {
+      ...portfolio.projects[projectIndex].toObject(),
+      ...req.body
+    };
+
+    await portfolio.save();
+
+    res.json({ success: true, data: portfolio, message: 'Project updated successfully' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc    Delete a project from portfolio
+// @route   DELETE /api/portfolio/me/projects/:projectId
+// @access  Private
+exports.deletePortfolioProject = async (req, res, next) => {
+  try {
+    const portfolio = await Portfolio.findOne({ student: req.user._id });
+    if (!portfolio) {
+      return res.status(404).json({ success: false, message: 'Portfolio not found' });
+    }
+
+    portfolio.projects = portfolio.projects.filter(
+      (p) => p._id.toString() !== req.params.projectId
+    );
+
+    await portfolio.save();
+
+    res.json({ success: true, data: portfolio, message: 'Project deleted successfully' });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // @desc    Get public portfolio by username
 // @route   GET /api/portfolio/:username
 // @access  Public
@@ -87,3 +141,4 @@ exports.getPortfolioByUsername = async (req, res, next) => {
     next(err);
   }
 };
+

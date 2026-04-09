@@ -8,6 +8,7 @@ const {
   forgotPassword,
   resetPassword,
   updateProfile,
+  updatePassword,
 } = require("../controllers/auth.controller");
 const { protect } = require("../middleware/auth.middleware");
 const { authLimiter } = require("../middleware/rateLimiter.middleware");
@@ -51,5 +52,6 @@ router.post(
 );
 router.get("/me", protect, getMe);
 router.put("/profile", protect, updateProfile);
+router.put("/password", protect, updatePassword);
 
 module.exports = router;
