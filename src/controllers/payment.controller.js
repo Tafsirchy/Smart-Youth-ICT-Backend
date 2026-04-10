@@ -4,6 +4,9 @@ const Course = require('../models/Course');
 const stripeService = require('../services/payment/stripe.service');
 const bkashService = require('../services/payment/bkash.service');
 const nagadService = require('../services/payment/nagad.service');
+const whatsappService = require('../services/whatsapp.service');
+const smsService      = require('../services/sms.service');
+const emailService    = require('../services/email.service');
 
 /**
  * @desc    Initialize a checkout session for a course
@@ -39,7 +42,12 @@ const initializeCheckout = async (req, res, next) => {
     if (paymentMethod === 'card') {
       const successUrl = `${process.env.FRONTEND_URL}/student/payments/success?session_id={CHECKOUT_SESSION_ID}`;
       const cancelUrl = `${process.env.FRONTEND_URL}/courses/${course.slug}`;
-      const sessionData = await stripeService.createCheckoutSession(amount, course.title?.en || course.title || 'Course', successUrl, cancelUrl);
+      const metadata = {
+        paymentId: paymentRecord._id.toString(),
+        courseId: courseId.toString(),
+        userId: user._id.toString()
+      };
+      const sessionData = await stripeService.createCheckoutSession(amount, course.title?.en || course.title || 'Course', successUrl, cancelUrl, metadata);
       paymentUrl = sessionData.url;
     } else if (paymentMethod === 'bkash') {
       const callbackUrl = `${process.env.FRONTEND_URL}/api/webhooks/bkash/callback`;
@@ -120,18 +128,129 @@ const stripeWebhook = async (req, res) => {
   // Handle successful checkout
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
+    const { paymentId, courseId, userId } = session.metadata || {};
     
-    // Find pending payment and update
-    // Create actual Enrollment record
-    // Send email/whatsapp success notification
-    console.log('Payment Successful via Stripe:', session.id);
+    if (paymentId) {
+      // 1. Update pending payment
+      const payment = await Payment.findByIdAndUpdate(paymentId, { 
+        status: 'completed',
+        transactionId: session.payment_intent || session.id
+      });
+
+      if (payment) {
+        // 2. Create actual Enrollment record
+        await Enrollment.findOneAndUpdate(
+          { user: payment.user, course: payment.course },
+          { paymentStatus: 'paid', branchId: payment.branchId },
+          { upsert: true, new: true }
+        );
+
+        // 3. Send notifications (Structural placeholders)
+        try {
+          // await whatsappService.sendEnrollmentNotice(payment.user, payment.course);
+          // await smsService.sendSMS(payment.user.phone, 'Payment success! Access granted.');
+        } catch (notifyErr) { console.error('Fulfillment notification error:', notifyErr.message); }
+
+        console.log(`[Fulfillment] Success: Course ${courseId} activated for user ${userId}`);
+      }
+    }
   }
 
   res.send();
 };
 
+/**
+ * @desc    bKash Callback Receiver
+ * @route   GET /api/payments/callback/bkash
+ * @access  Public
+ */
+const bkashCallback = async (req, res, next) => {
+  try {
+    const { paymentID, status } = req.query;
+
+    if (status === 'success') {
+      const result = await bkashService.executePayment(paymentID);
+      
+      if (result.statusCode === '0000') {
+        // Find existing record by gateway reference (paymentID or previous TRID)
+        const payment = await Payment.findOne({ 
+          transactionId: { $in: [paymentID, req.query.invoice] }, 
+          status: 'pending' 
+        });
+
+        if (payment) {
+          payment.status = 'completed';
+          payment.transactionId = result.trxID;
+          await payment.save();
+
+          await Enrollment.findOneAndUpdate(
+            { user: payment.user, course: payment.course },
+            { paymentStatus: 'paid', branchId: payment.branchId },
+            { upsert: true }
+          );
+
+          // Notify (Placeholder)
+          try {
+             // await whatsappService.sendEnrollmentNotice(payment.user, payment.course);
+          } catch(e) {}
+        }
+        return res.redirect(`${process.env.FRONTEND_URL}/student/payments/success`);
+      }
+    }
+    
+    res.redirect(`${process.env.FRONTEND_URL}/student/payments/failed`);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Nagad Callback Receiver
+ * @route   GET /api/payments/callback/nagad
+ * @access  Public
+ */
+const nagadCallback = async (req, res, next) => {
+  try {
+    const { payment_ref_id, status } = req.query;
+
+    if (status === 'Success') {
+      const result = await nagadService.verifyPayment(payment_ref_id);
+      
+      if (result.status === 'Success') {
+        const payment = await Payment.findOne({ 
+          transactionId: payment_ref_id, 
+          status: 'pending' 
+        });
+
+        if (payment) {
+          payment.status = 'completed';
+          await payment.save();
+
+          await Enrollment.findOneAndUpdate(
+            { user: payment.user, course: payment.course },
+            { paymentStatus: 'paid', branchId: payment.branchId },
+            { upsert: true }
+          );
+
+          // Notify (Placeholder)
+          try {
+             // await whatsappService.sendEnrollmentNotice(payment.user, payment.course);
+          } catch(e) {}
+        }
+        return res.redirect(`${process.env.FRONTEND_URL}/student/payments/success`);
+      }
+    }
+    
+    res.redirect(`${process.env.FRONTEND_URL}/student/payments/failed`);
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   initializeCheckout,
   stripeWebhook,
-  getPayments
+  getPayments,
+  bkashCallback,
+  nagadCallback
 };

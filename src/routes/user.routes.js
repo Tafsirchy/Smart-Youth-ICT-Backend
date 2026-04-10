@@ -8,17 +8,28 @@ const {
   getAllUsers,
   getUserById,
   toggleUserStatus,
+  adminCreateUser,
+  adminUpdateUser,
+  adminDeleteUser,
+  updateUserRole
 } = require('../controllers/user.controller');
 
 // Current user (any authenticated user)
-router.get('/me',          protect, getMyProfile);
-router.put('/me',          protect, updateMyProfile);
+router.get('/me',           protect, getMyProfile);
+router.put('/me',           protect, updateMyProfile);
 
 // Admin / Management only
-const adminRoles = ['super_admin', 'super_management', 'branch_admin', 'branch_management'];
-router.get('/',            protect, authorize(...adminRoles), getAllUsers);
-router.get('/:id',         protect, authorize(...adminRoles), getUserById);
-router.patch('/:id/status',protect, authorize(...adminRoles), toggleUserStatus);
-router.put('/:id/role',    protect, authorize('super_admin', 'super_management'), require('../controllers/user.controller').updateUserRole);
+const superRoles = ['super_admin', 'super_management'];
+const adminRoles = [...superRoles, 'branch_admin', 'branch_management'];
+
+router.get('/',             protect, authorize(...adminRoles), getAllUsers);
+router.post('/',            protect, authorize(...superRoles), adminCreateUser);
+
+router.get('/:id',          protect, authorize(...adminRoles), getUserById);
+router.put('/:id',          protect, authorize(...adminRoles), adminUpdateUser);
+router.delete('/:id',       protect, authorize(...superRoles), adminDeleteUser);
+
+router.patch('/:id/status', protect, authorize(...adminRoles), toggleUserStatus);
+router.put('/:id/role',     protect, authorize(...superRoles), updateUserRole);
 
 module.exports = router;

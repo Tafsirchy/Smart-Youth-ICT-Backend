@@ -25,10 +25,10 @@ const getCourses = async (req, res, next) => {
     if (includeUnpublished !== "true") {
       filter.isPublished = true;
     }
-    if (category) filter.category = category;
+    if (category) filter.category = String(category);
 
     // Multi-tenant filtering
-    if (branchId) filter.branchId = branchId;
+    if (branchId) filter.branchId = String(branchId);
     if (isMaster !== undefined) filter.isMaster = isMaster === "true";
     if (isPopular !== undefined) filter.isPopular = isPopular === "true";
 

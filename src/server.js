@@ -41,8 +41,28 @@ const PORT = process.env.PORT || 5000;
 // ─── Connect Database ─────────────────────────────────────────────
 connectDB();
 
+// ─── Geospatial Migration (Legacy → GeoJSON) ──────────────────────
+if (process.env.RUN_MIGRATIONS === 'true') {
+  const migrateToGeoJSON = require('./utils/geospatial-migration');
+  migrateToGeoJSON();
+}
+
 // ─── Global Middleware ────────────────────────────────────────────
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://apis.google.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      imgSrc: ["'self'", "data:", "https://*"],
+      connectSrc: ["'self'", "https://*"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'self'", "https://accounts.google.com"],
+    },
+  },
+}));
 const corsOptions = {
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true,

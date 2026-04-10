@@ -79,4 +79,18 @@ UserSchema.methods.addProvider = function (provider) {
   }
 };
 
+const userCache = require("../utils/userCache");
+
+UserSchema.post("save", function (doc) {
+  userCache.del(doc._id);
+});
+
+UserSchema.post("findOneAndUpdate", function (doc) {
+  if (doc && doc._id) userCache.del(doc._id);
+});
+
+UserSchema.post("findOneAndDelete", function (doc) {
+  if (doc && doc._id) userCache.del(doc._id);
+});
+
 module.exports = mongoose.model("User", UserSchema);

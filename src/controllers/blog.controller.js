@@ -1,5 +1,6 @@
 const BlogPost = require('../models/BlogPost');
 const slugify  = require('slugify');
+const sanitizeHtml = require('sanitize-html');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -84,11 +85,20 @@ const createPost = async (req, res, next) => {
     const { title, excerpt, content, thumbnail, tags, isPublished } = req.body;
     const slug = await generateUniqueSlug(title);
 
+    // Sanitize content to prevent XSS
+    const cleanContent = sanitizeHtml(content || "", {
+      allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'h1', 'h2', 'span', 'div']),
+      allowedAttributes: {
+        ...sanitizeHtml.defaults.allowedAttributes,
+        '*': ['style', 'class'],
+      }
+    });
+
     const post = await BlogPost.create({
       title,
       slug,
       excerpt,
-      content,
+      content: cleanContent,
       thumbnail,
       tags: tags || [],
       isPublished: isPublished || false,
@@ -113,13 +123,28 @@ const updatePost = async (req, res, next) => {
 
     const { title, excerpt, content, thumbnail, tags, isPublished } = req.body;
 
+    // Authorization check (IDOR protection)
+    if (req.user.role === 'instructor' && post.author.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'You can only update your own posts' });
+    }
+
     // Re-slug only if title changed
     if (title && title !== post.title) {
       post.slug = await generateUniqueSlug(title, post._id);
       post.title = title;
     }
     if (excerpt !== undefined) post.excerpt = excerpt;
-    if (content  !== undefined) post.content = content;
+    
+    if (content !== undefined) {
+      post.content = sanitizeHtml(content, {
+        allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'h1', 'h2', 'span', 'div']),
+        allowedAttributes: {
+          ...sanitizeHtml.defaults.allowedAttributes,
+          '*': ['style', 'class'],
+        }
+      });
+    }
+
     if (thumbnail !== undefined) post.thumbnail = thumbnail;
     if (tags !== undefined) post.tags = tags;
     if (isPublished !== undefined) post.isPublished = isPublished;

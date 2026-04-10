@@ -78,6 +78,16 @@ const CourseSchema = new mongoose.Schema(
     previewVideo: { type: String, default: "" },
     price: { type: Number, required: true },
     originalPrice: { type: Number, default: null }, // crossed-out "was" price for discounts
+    totalLectures: { type: Number, default: 0 },
+    projectsCount: { type: Number, default: 0 },
+    instructorName: { type: String, default: "" },
+    instructorBio: { type: String, default: "" },
+    whatsIncluded: [
+      {
+        text: String,
+        included: { type: Boolean, default: true },
+      },
+    ],
     installmentPlan: {
       enabled: { type: Boolean, default: false },
       parts: { type: Number, default: 2 },
