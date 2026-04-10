@@ -45,10 +45,11 @@ exports.getAllUsers = async (req, res, next) => {
     const limitNum = Number(limit) || 20;
 
     const users = await User.find(filter)
-      .select('-password -resetToken -resetExpiry')
+      .select('name email role branchId isActive phone createdAt')
       .skip((page - 1) * limitNum)
       .limit(limitNum)
-      .sort('-createdAt');
+      .sort('-createdAt')
+      .lean();
 
     const total = await User.countDocuments(filter);
     res.json({ 
@@ -66,12 +67,14 @@ exports.getAllUsers = async (req, res, next) => {
 // @access  Private (admin)
 exports.getUserById = async (req, res, next) => {
   try {
-    const user = await User.findById(req.params.id).select('-password -resetToken -resetExpiry');
+    const user = await User.findById(req.params.id)
+      .select('-password -resetToken -resetExpiry')
+      .lean();
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
     // Include enrollment count for context
     const enrollmentCount = await Enrollment.countDocuments({ user: user._id });
-    res.json({ success: true, data: { ...user.toObject(), enrollmentCount } });
+    res.json({ success: true, data: { ...user, enrollmentCount } });
   } catch (err) { next(err); }
 };
 

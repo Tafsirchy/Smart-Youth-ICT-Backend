@@ -5,6 +5,7 @@ const cors       = require('cors');
 const helmet     = require('helmet');
 const morgan     = require('morgan');
 const connectDB  = require('./config/db');
+const compression = require('compression');
 const errorMiddleware = require('./middleware/error.middleware');
 
 // ─── Route imports ────────────────────────────────────────────────
@@ -48,6 +49,7 @@ if (process.env.RUN_MIGRATIONS === 'true') {
 }
 
 // ─── Global Middleware ────────────────────────────────────────────
+app.use(compression());
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {

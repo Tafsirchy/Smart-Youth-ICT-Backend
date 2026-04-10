@@ -10,6 +10,8 @@ const slugify = require("slugify");
  */
 const getCourses = async (req, res, next) => {
   try {
+    // Set public cache for 5 mins (browser) and 10 mins (CDN/Varnish)
+    res.set("Cache-Control", "public, max-age=300, s-maxage=600");
     const {
       category,
       page = 1,
@@ -33,10 +35,12 @@ const getCourses = async (req, res, next) => {
     if (isPopular !== undefined) filter.isPopular = isPopular === "true";
 
     const courses = await Course.find(filter)
+      .select("title slug thumbnail price originalPrice category instructor tagline totalStudents isPopular mode duration branchId")
       .populate("instructor", "name avatar")
+      .sort("-createdAt")
       .skip((page - 1) * limit)
       .limit(Number(limit))
-      .sort("-createdAt");
+      .lean();
 
     res.json({ success: true, count: courses.length, data: courses });
   } catch (err) {
@@ -51,10 +55,11 @@ const getCourses = async (req, res, next) => {
  */
 const getCourseBySlug = async (req, res, next) => {
   try {
-    const course = await Course.findOne({ slug: req.params.slug }).populate(
-      "instructor",
-      "name avatar",
-    );
+    // Single course details can be cached slightly longer (10 mins browser, 30 mins CDN)
+    res.set("Cache-Control", "public, max-age=600, s-maxage=1800");
+    const course = await Course.findOne({ slug: req.params.slug })
+      .populate("instructor", "name avatar")
+      .lean();
 
     if (!course) {
       return res
@@ -77,7 +82,9 @@ const getEnrolledCourses = async (req, res, next) => {
     const enrollments = await Enrollment.find({
       user: req.user._id,
       paymentStatus: "paid",
-    }).populate("course");
+    })
+      .populate("course")
+      .lean();
 
     res.json({ success: true, data: enrollments.map((e) => e.course) });
   } catch (err) {

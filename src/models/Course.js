@@ -102,4 +102,9 @@ const CourseSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+// ─── Indexes ──────────────────────────────────────────────────────
+CourseSchema.index({ category: 1, isPublished: 1 });
+CourseSchema.index({ isPopular: 1, isPublished: 1 });
+CourseSchema.index({ createdAt: -1 });
+
 module.exports = mongoose.model("Course", CourseSchema);
