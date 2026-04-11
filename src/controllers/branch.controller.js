@@ -42,6 +42,8 @@ exports.getBranchStats = async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+};
+
 // @desc    Get lightweight list of active branches for dropdowns
 // @route   GET /api/branches/public/list
 // @access  Public
