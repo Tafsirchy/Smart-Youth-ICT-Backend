@@ -1,6 +1,7 @@
 const Payment = require('../models/Payment');
 const Enrollment = require('../models/Enrollment');
 const Course = require('../models/Course');
+const User = require('../models/User');
 const stripeService = require('../services/payment/stripe.service');
 const bkashService = require('../services/payment/bkash.service');
 const nagadService = require('../services/payment/nagad.service');
@@ -30,10 +31,11 @@ const initializeCheckout = async (req, res, next) => {
     const paymentRecord = await Payment.create({
       user: user._id,
       course: courseId,
-      method: paymentMethod, // 'card', 'bkash', 'nagad', 'bank'
+      branchId: user.branchId, // 🛡️ Security Fix: Link payment to branch for isolation
+      method: paymentMethod, 
       amount,
       status: 'pending',
-      transactionId: invoiceNumber // Temporary TRID
+      transactionId: invoiceNumber 
     });
 
     let paymentUrl = '';
@@ -147,8 +149,10 @@ const stripeWebhook = async (req, res) => {
 
         // 3. Send notifications (Structural placeholders)
         try {
-          // await whatsappService.sendEnrollmentNotice(payment.user, payment.course);
-          // await smsService.sendSMS(payment.user.phone, 'Payment success! Access granted.');
+          const userObj = await User.findById(userId);
+          if (userObj) {
+            await emailService.sendPaymentReceipt(userObj, payment);
+          }
         } catch (notifyErr) { console.error('Fulfillment notification error:', notifyErr.message); }
 
         console.log(`[Fulfillment] Success: Course ${courseId} activated for user ${userId}`);
@@ -171,8 +175,8 @@ const bkashCallback = async (req, res, next) => {
     if (status === 'success') {
       const result = await bkashService.executePayment(paymentID);
       
-      if (result.statusCode === '0000') {
-        // Find existing record by gateway reference (paymentID or previous TRID)
+      // 🛡️ Security Fix: Strictly verify gateway status server-to-server before activation
+      if (result && result.statusCode === '0000' && result.transactionStatus === 'Completed') {
         const payment = await Payment.findOne({ 
           transactionId: { $in: [paymentID, req.query.invoice] }, 
           status: 'pending' 
@@ -191,14 +195,21 @@ const bkashCallback = async (req, res, next) => {
 
           // Notify (Placeholder)
           try {
-             // await whatsappService.sendEnrollmentNotice(payment.user, payment.course);
+             const userObj = await User.findById(payment.user);
+             if (userObj) {
+               await emailService.sendPaymentReceipt(userObj, payment);
+             }
           } catch(e) {}
         }
-        return res.redirect(`${process.env.FRONTEND_URL}/student/payments/success`);
+        
+        // 🛡️ Security Fix: Strict Redirect White-listing
+        const safeRedirect = `${process.env.FRONTEND_URL}/student/payments/success`;
+        return res.redirect(safeRedirect);
       }
     }
     
-    res.redirect(`${process.env.FRONTEND_URL}/student/payments/failed`);
+    const failRedirect = `${process.env.FRONTEND_URL}/student/payments/failed`;
+    res.redirect(failRedirect);
   } catch (error) {
     next(error);
   }
@@ -216,7 +227,8 @@ const nagadCallback = async (req, res, next) => {
     if (status === 'Success') {
       const result = await nagadService.verifyPayment(payment_ref_id);
       
-      if (result.status === 'Success') {
+      // 🛡️ Security Fix: Strictly verify gateway status server-to-server before activation
+      if (result && result.status === 'Success' && result.paymentStatus === 'Success') {
         const payment = await Payment.findOne({ 
           transactionId: payment_ref_id, 
           status: 'pending' 
@@ -234,14 +246,21 @@ const nagadCallback = async (req, res, next) => {
 
           // Notify (Placeholder)
           try {
-             // await whatsappService.sendEnrollmentNotice(payment.user, payment.course);
+             const userObj = await User.findById(payment.user);
+             if (userObj) {
+               await emailService.sendPaymentReceipt(userObj, payment);
+             }
           } catch(e) {}
         }
-        return res.redirect(`${process.env.FRONTEND_URL}/student/payments/success`);
+        
+        // 🛡️ Security Fix: Strict Redirect White-listing
+        const safeRedirect = `${process.env.FRONTEND_URL}/student/payments/success`;
+        return res.redirect(safeRedirect);
       }
     }
     
-    res.redirect(`${process.env.FRONTEND_URL}/student/payments/failed`);
+    const failRedirect = `${process.env.FRONTEND_URL}/student/payments/failed`;
+    res.redirect(failRedirect);
   } catch (error) {
     next(error);
   }

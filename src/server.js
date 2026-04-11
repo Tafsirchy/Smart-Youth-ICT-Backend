@@ -33,6 +33,7 @@ const invoiceRoutes     = require('./routes/invoice.routes');
 const notificationRoutes = require('./routes/notification.routes');
 const instructorRoutes   = require('./routes/instructor.routes');
 const superRoutes        = require('./routes/super.routes');
+const cmsRoutes          = require('./routes/cms.routes');
 
 const supportRoutes      = require('./routes/support.routes');
 
@@ -48,7 +49,10 @@ if (process.env.RUN_MIGRATIONS === 'true') {
   migrateToGeoJSON();
 }
 
+const { apiLimiter } = require('./middleware/rateLimiter.middleware');
+
 // ─── Global Middleware ────────────────────────────────────────────
+app.use(apiLimiter); // Apply baseline global rate limiting
 app.use(compression());
 app.use(helmet({
   contentSecurityPolicy: {
@@ -76,8 +80,9 @@ app.use(morgan('dev'));
 // Stripe requires the raw body to construct the event and verify signatures.
 app.use('/api/payments/webhook/stripe', express.raw({ type: 'application/json' }));
 
-app.use(express.json()); // Parse incoming JSON payloads
-app.use(express.urlencoded({ extended: true }));
+// 🛡️ Security Hardening: Enforce strict payload limits to prevent memory exhaustion (DoS)
+app.use(express.json({ limit: '20kb' })); 
+app.use(express.urlencoded({ extended: true, limit: '20kb' }));
 
 // ─── API Routes ───────────────────────────────────────────────────
 const API = '/api';
@@ -104,6 +109,7 @@ app.use(`${API}/assets`,       assetRoutes);
 app.use(`${API}/invoices`,     invoiceRoutes);
 app.use(`${API}/notifications`, notificationRoutes);
 app.use(`${API}/super`,         superRoutes);
+app.use(`${API}/cms`,           cmsRoutes);
 app.use(`${API}/support`,       supportRoutes);
 
 

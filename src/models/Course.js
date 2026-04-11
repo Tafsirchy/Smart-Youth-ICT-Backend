@@ -103,8 +103,12 @@ const CourseSchema = new mongoose.Schema(
 );
 
 // ─── Indexes ──────────────────────────────────────────────────────
-CourseSchema.index({ category: 1, isPublished: 1 });
-CourseSchema.index({ isPopular: 1, isPublished: 1 });
+CourseSchema.index({ isPublished: 1, isDeleted: 1, createdAt: -1 });
+CourseSchema.index({ category: 1, isPublished: 1, isDeleted: 1 });
+CourseSchema.index({ branchId: 1, isPublished: 1, isDeleted: 1 });
+CourseSchema.index({ isPopular: 1, isPublished: 1, isDeleted: 1 });
+CourseSchema.index({ isMaster: 1, isPublished: 1, isDeleted: 1 });
+CourseSchema.index({ slug: 1 }, { unique: true });
 CourseSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model("Course", CourseSchema);

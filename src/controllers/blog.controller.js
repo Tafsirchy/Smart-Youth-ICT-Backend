@@ -31,12 +31,16 @@ async function generateUniqueSlug(title, existingId = null) {
 const getAllPosts = async (req, res, next) => {
   try {
     const { page = 1, limit = 9, tag, q } = req.query;
-    const isAdmin = req.user && req.user.role === 'admin';
+    const isAdmin = req.user && ['super_admin', 'super_management', 'branch_admin'].includes(req.user.role);
 
     const filter = {};
     if (!isAdmin) filter.isPublished = true;
     if (tag) filter.tags = tag;
-    if (q) filter.title = { $regex: q, $options: 'i' };
+    if (q) {
+      // 🛡️ Security Fix: Escape regex special characters to prevent NoSQL injection
+      const escapedQ = String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      filter.title = { $regex: escapedQ, $options: 'i' };
+    }
 
     const total = await BlogPost.countDocuments(filter);
     const posts  = await BlogPost.find(filter)
@@ -59,7 +63,14 @@ const getAllPosts = async (req, res, next) => {
  */
 const getPostBySlug = async (req, res, next) => {
   try {
-    const post = await BlogPost.findOne({ slug: req.params.slug })
+    const filter = { slug: req.params.slug };
+    // 🛡️ Security Fix: Prevent guests from viewing unpublished drafts
+    const isAdmin = req.user && ['super_admin', 'super_management', 'branch_admin'].includes(req.user.role);
+    if (!isAdmin) {
+      filter.isPublished = true;
+    }
+
+    const post = await BlogPost.findOne(filter)
       .populate('author', 'name avatar');
 
     if (!post) {

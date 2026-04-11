@@ -66,6 +66,9 @@ const register = async (req, res, next) => {
       branchId: assignedBranch,
     });
 
+    // 📧 Fire-and-forget Welcome Email
+    emailService.sendWelcome(user).catch(err => console.error('[Registration Email Failed]', err.message));
+
     return sendAuthResponse(res, 201, user);
   } catch (err) {
     next(err);

@@ -8,6 +8,8 @@ const SupportTicket = require('../models/SupportTicket');
 const SystemSetting = require('../models/SystemSetting');
 const HelpArticle = require('../models/HelpArticle');
 const slugify = require('slugify');
+const emailService = require('../services/email.service');
+const sanitizeHtml = require('sanitize-html');
 
 // @desc    Get global analytics (Super Admin only)
 // @route   GET /api/super/stats
@@ -197,14 +199,9 @@ exports.onboardBranch = async (req, res, next) => {
       branchId: branch._id
     });
 
-    // Log the strategic expansion
-    await AuditLog.create({ 
-      actor: req.user._id, 
-      action: 'ONBOARD_BRANCH', 
-      entity: 'Branch', 
-      entityId: branch._id,
-      details: { name, type, adminEmail }
-    });
+    // 📧 Notify Branch Admin with temporary credentials
+    emailService.sendBranchOnboarding(admin, branch, adminPassword)
+      .catch(err => console.error('[Onboarding Email Failed]', err.message));
 
     res.status(201).json({
       success: true,
@@ -335,14 +332,35 @@ exports.replyToTicket = async (req, res, next) => {
     const ticket = await SupportTicket.findById(req.params.id);
     if (!ticket) return res.status(404).json({ success: false, message: 'Ticket not found' });
 
+    const cleanMessage = sanitizeHtml(message || "", {
+      allowedTags: ['b', 'i', 'em', 'strong', 'a', 'br', 'p'],
+      allowedAttributes: { 'a': ['href'] }
+    });
+
     ticket.responses.push({
       user: req.user._id,
-      message,
+      message: cleanMessage,
       createdAt: Date.now()
     });
     
     if (ticket.status === 'open') ticket.status = 'in-progress';
     await ticket.save();
+
+    // 📧 Notify Student (Async)
+    emailService._send({
+      to: ticket.user.email,
+      subject: `🎫 Update on Ticket: ${ticket.subject}`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
+          <h2 style="color: #1e1b4b;">Support Ticket Update</h2>
+          <p style="color: #475569;">Hi ${ticket.user.name}, the Head Office has responded to your ticket:</p>
+          <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #db2777;">
+            <p style="margin: 0;">${cleanMessage}</p>
+          </div>
+          <p style="color: #64748b; font-size: 14px;">Log in to the dashboard to view the full conversation history.</p>
+        </div>
+      `
+    }).catch(e => console.error('[Ticket Email Failed]', e.message));
 
     res.json({ success: true, data: ticket });
   } catch (err) { next(err); }

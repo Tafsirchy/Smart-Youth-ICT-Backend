@@ -18,9 +18,9 @@ router.get('/',     getAllPosts);
 router.get('/:slug', getPostBySlug);
 
 // Protected routes (Admin / Instructor)
-router.post('/',          protect, authorize('admin', 'instructor'), createPost);
-router.put('/:id',        protect, authorize('admin', 'instructor'), updatePost);
-router.patch('/:id/publish', protect, authorize('admin'),            togglePublish);
-router.delete('/:id',     protect, authorize('admin'),               deletePost);
+router.post('/',          protect, authorize('super_admin', 'branch_admin', 'instructor'), createPost);
+router.put('/:id',        protect, authorize('super_admin', 'branch_admin', 'instructor'), updatePost);
+router.patch('/:id/publish', protect, authorize('super_admin', 'branch_admin'),            togglePublish);
+router.delete('/:id',     protect, authorize('super_admin'),                           deletePost);
 
 module.exports = router;

@@ -1,6 +1,8 @@
 const Assignment = require('../models/Assignment');
 const Submission = require('../models/Submission');
 const Enrollment = require('../models/Enrollment');
+const User = require('../models/User');
+const emailService = require('../services/email.service');
 
 // @desc    Get assignments for a specific course
 // @route   GET /api/assignments/:courseId
@@ -43,11 +45,17 @@ exports.submitAssignment = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'You have already submitted this assignment' });
     }
 
+    // 🛡️ Security Fix: Sanitize input to prevent Stored XSS
+    const cleanFileUrl = String(fileUrl || "").trim();
+    if (cleanFileUrl.toLowerCase().startsWith('javascript:')) {
+      return res.status(400).json({ success: false, message: 'Invalid file URL provided' });
+    }
+
     const submission = await Submission.create({
       assignment: assignmentId,
       student: req.user._id,
-      fileUrl, // e.g., GitHub repo link or ImgBB screenshot
-      notes,
+      fileUrl: cleanFileUrl, 
+      notes: typeof notes === 'string' ? require('sanitize-html')(notes) : notes,
     });
 
     res.status(201).json({ success: true, data: submission, message: 'Assignment submitted successfully' });
@@ -61,7 +69,26 @@ exports.submitAssignment = async (req, res, next) => {
 // @access  Private (Admin/Instructor)
 exports.createAssignment = async (req, res, next) => {
   try {
-    const assignment = await Assignment.create(req.body);
+    // 🛡️ Security Fix: Explicit allow-list for Mass Assignment protection
+    const { course: courseId, title, lessonTitle, description, dueDate, points, status } = req.body;
+    
+    // Authorization: Ensure instructor owns the course
+    if (req.user.role === 'instructor') {
+      const course = await require('../models/Course').findById(courseId);
+      if (course?.instructor?.toString() !== req.user._id.toString()) {
+        return res.status(403).json({ success: false, message: 'You can only create assignments for your own courses' });
+      }
+    }
+
+    const assignment = await Assignment.create({
+      course: courseId,
+      title,
+      lessonTitle,
+      description,
+      dueDate,
+      points,
+      status: status || 'active'
+    });
     res.status(201).json({ success: true, data: assignment });
   } catch (err) {
     next(err);
@@ -78,10 +105,26 @@ exports.gradeSubmission = async (req, res, next) => {
     
     if (!submission) return res.status(404).json({ success: false, message: 'Submission not found' });
 
+    // 🛡️ Security Fix: Authorization Check
+    // Ensure instructor owns the course associated with this assignment
+    const assignment = await Assignment.findById(submission.assignment).populate('course');
+    if (req.user.role === 'instructor' && assignment?.course?.instructor?.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Unauthorized: You do not teach this course' });
+    }
+
     submission.grade = grade;
-    submission.feedback = feedback;
+    submission.feedback = require('sanitize-html')(feedback || "");
     submission.status = 'graded';
     await submission.save();
+
+    // 📧 Notify Student
+    try {
+      const student = await User.findById(submission.student);
+      if (student) {
+        emailService.sendAssignmentFeedback(student, assignment, grade)
+          .catch(e => console.error('[Assignment Email Failed]', e.message));
+      }
+    } catch(e) {}
 
     res.json({ success: true, data: submission });
   } catch (err) {

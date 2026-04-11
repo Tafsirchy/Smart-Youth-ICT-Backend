@@ -1,6 +1,7 @@
 const Enrollment = require('../models/Enrollment');
 const User = require('../models/User');
 const Course = require('../models/Course');
+const emailService = require('../services/email.service');
 
 // @desc    Get all enrollments (Admin/Management only, branch-aware)
 // @route   GET /api/enrollments
@@ -42,8 +43,13 @@ exports.getEnrollment = async (req, res, next) => {
 
     if (!enrollment) return res.status(404).json({ success: false, message: 'Enrollment not found' });
 
-    // Isolation check
-    if (req.user.role !== 'super_admin' && enrollment.branchId?.toString() !== req.user.branchId?.toString()) {
+    // 🛡️ Security Fix: Prevent IDOR (Students must only see their own enrollments)
+    if (req.user.role === 'student' && enrollment.user?._id?.toString() !== req.user._id.toString()) {
+        return res.status(403).json({ success: false, message: 'Access denied: You can only view your own enrollment details.' });
+    }
+
+    // Branch isolation check for admins
+    if (['admin', 'branch_admin', 'branch_management'].includes(req.user.role) && enrollment.branchId?.toString() !== req.user.branchId?.toString()) {
       return res.status(403).json({ success: false, message: 'Unauthorized access to this branch data.' });
     }
 
@@ -65,12 +71,25 @@ exports.createEnrollment = async (req, res, next) => {
         return res.status(400).json({ success: false, message: 'UserID, CourseID and BranchID are required.' });
     }
 
+    // 🛡️ Security Fix: Avoid Mass Assignment
     const enrollment = await Enrollment.create({
       user: userId,
       course: courseId,
       branchId: targetBranch,
-      paymentStatus: 'paid' // Assuming manual admin enrollment is paid or handle otherwise
+      paymentStatus: req.body.paymentStatus || 'paid' 
     });
+
+    // 📧 Notify Student
+    try {
+      const [user, course] = await Promise.all([
+        User.findById(userId),
+        Course.findById(courseId)
+      ]);
+      if (user && course) {
+        emailService.sendEnrollmentConfirm(user, course)
+          .catch(e => console.error('[Enrollment Email Failed]', e.message));
+      }
+    } catch(e) {}
 
     res.status(201).json({ success: true, data: enrollment });
   } catch (err) {

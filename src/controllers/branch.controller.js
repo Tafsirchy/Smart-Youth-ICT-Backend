@@ -42,4 +42,13 @@ exports.getBranchStats = async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+// @desc    Get lightweight list of active branches for dropdowns
+// @route   GET /api/branches/public/list
+// @access  Public
+exports.getPublicBranches = async (req, res, next) => {
+  try {
+    const branches = await require('../models/Branch').find({ isActive: true }).select('name code').sort('name');
+    res.json({ success: true, data: branches });
+  } catch (err) { next(err); }
 };
+

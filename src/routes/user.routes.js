@@ -11,8 +11,12 @@ const {
   adminCreateUser,
   adminUpdateUser,
   adminDeleteUser,
-  updateUserRole
+  updateUserRole,
+  getPublicInstructors
 } = require('../controllers/user.controller');
+
+// Public listing
+router.get('/instructors/public', getPublicInstructors);
 
 // Current user (any authenticated user)
 router.get('/me',           protect, getMyProfile);

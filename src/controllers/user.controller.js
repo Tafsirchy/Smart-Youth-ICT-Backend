@@ -34,11 +34,19 @@ exports.getAllUsers = async (req, res, next) => {
     const { role, branchId, q, page = 1, limit = 20 } = req.query;
     const filter = {};
     if (role) filter.role = role;
-    if (branchId) filter.branchId = branchId;
+    
+    // 🛡️ Security Fix: Enforce Branch Isolation (IDOR Mitigation)
+    if (['branch_admin', 'branch_management'].includes(req.user.role)) {
+      filter.branchId = req.user.branchId;
+    } else if (branchId) {
+      filter.branchId = branchId;
+    }
     if (q) {
+      // 🛡️ Security Fix: Escape regex special characters to prevent NoSQL injection
+      const escapedQ = String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       filter.$or = [
-        { name: { $regex: q, $options: 'i' } },
-        { email: { $regex: q, $options: 'i' } }
+        { name: { $regex: escapedQ, $options: 'i' } },
+        { email: { $regex: escapedQ, $options: 'i' } }
       ];
     }
 
@@ -71,6 +79,13 @@ exports.getUserById = async (req, res, next) => {
       .select('-password -resetToken -resetExpiry')
       .lean();
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    
+    // 🛡️ Security Fix: Branch Isolation Check
+    if (['branch_admin', 'branch_management'].includes(req.user.role)) {
+      if (user.branchId?.toString() !== req.user.branchId?.toString()) {
+        return res.status(403).json({ success: false, message: 'Access denied: User belongs to another branch' });
+      }
+    }
 
     // Include enrollment count for context
     const enrollmentCount = await Enrollment.countDocuments({ user: user._id });
@@ -85,6 +100,13 @@ exports.toggleUserStatus = async (req, res, next) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    // 🛡️ Security Fix: Branch Isolation Check
+    if (['branch_admin', 'branch_management'].includes(req.user.role)) {
+      if (user.branchId?.toString() !== req.user.branchId?.toString()) {
+        return res.status(403).json({ success: false, message: 'Access denied: Target user belongs to another branch' });
+      }
+    }
 
     user.isActive = !user.isActive;
     user.tokenVersion = (user.tokenVersion || 0) + 1; // Invalidate all existing sessions
@@ -131,6 +153,13 @@ exports.adminUpdateUser = async (req, res, next) => {
     
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    // 🛡️ Security Fix: Branch Isolation Check
+    if (!isSuper && ['branch_admin', 'branch_management'].includes(req.user.role)) {
+      if (user.branchId?.toString() !== req.user.branchId?.toString()) {
+        return res.status(403).json({ success: false, message: 'Access denied: Target user belongs to another branch' });
+      }
+    }
 
     if (name) user.name = name;
     if (email) user.email = email;
@@ -214,4 +243,45 @@ exports.updateUserRole = async (req, res, next) => {
     res.json({ success: true, data: updatedUser, message: 'Role updated successfully' });
   } catch (err) { next(err); }
 };
+// @desc    Get all instructors/mentors for public showcase
+// @route   GET /api/users/instructors/public
+// @access  Public
+exports.getPublicInstructors = async (req, res, next) => {
+  try {
+    const { branchId, courseId, q, page = 1, limit = 50 } = req.query;
+    const filter = { role: 'instructor', isActive: true };
 
+    if (branchId) filter.branchId = branchId;
+
+    if (courseId) {
+      const Course = require('../models/Course');
+      const instructorIds = await Course.find({ _id: courseId }).distinct('instructor');
+      filter._id = { $in: instructorIds };
+    }
+
+    if (q) {
+      const escapedQ = String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      filter.$or = [
+        { name: { $regex: escapedQ, $options: 'i' } },
+        { expertise: { $regex: escapedQ, $options: 'i' } }
+      ];
+    }
+
+    const limitNum = Number(limit) || 50;
+    const instructors = await User.find(filter)
+      .select('name avatar bio expertise role branchId')
+      .populate('branchId', 'name')
+      .skip((page - 1) * limitNum)
+      .limit(limitNum)
+      .sort('name')
+      .lean();
+
+    const total = await User.countDocuments(filter);
+    res.json({
+      success: true,
+      count: instructors.length,
+      total,
+      data: instructors
+    });
+  } catch (err) { next(err); }
+};

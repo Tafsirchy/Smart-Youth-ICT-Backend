@@ -22,7 +22,9 @@ const protect = async (req, res, next) => {
 
     // 2. Fetch from DB if miss
     if (!user) {
-      user = await User.findById(decoded.id).select("-password -resetToken -resetExpiry").lean();
+      user = await User.findById(decoded.id)
+        .select("-password -resetToken -resetExpiry -googleId")
+        .lean();
       if (!user) return res.status(401).json({ message: "User not found" });
       
       // Store in cache
