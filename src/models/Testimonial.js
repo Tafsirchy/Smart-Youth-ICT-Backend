@@ -5,13 +5,17 @@ const TestimonialSchema = new mongoose.Schema(
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      required: function() { return !this.isManual; },
     },
     course: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Course",
-      required: true,
+      required: function() { return !this.isManual; },
     },
+    isManual: { type: Boolean, default: false },
+    manualName: { type: String, trim: true },
+    manualAvatar: { type: String, trim: true },
+    manualCourse: { type: String, trim: true },
     rating: {
       type: Number,
       required: true,
@@ -44,6 +48,7 @@ const TestimonialSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-TestimonialSchema.index({ user: 1, course: 1 }, { unique: true });
+TestimonialSchema.index({ moderationStatus: 1 });
+TestimonialSchema.index({ isApproved: 1 });
 
 module.exports = mongoose.model("Testimonial", TestimonialSchema);
