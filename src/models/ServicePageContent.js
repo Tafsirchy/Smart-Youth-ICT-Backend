@@ -28,9 +28,14 @@ const ServicePageContentSchema = new mongoose.Schema(
     },
     hero: HeroContentSchema,
     methodology: [MethodologyItemSchema],
+    details: {
+      hero: HeroContentSchema,
+      sections: mongoose.Schema.Types.Mixed,
+      cta: CTAContentSchema
+    },
     cta: CTAContentSchema
   },
-  { timestamps: true }
+  { timestamps: true, strict: false }
 );
 
 module.exports = mongoose.model("ServicePageContent", ServicePageContentSchema);

@@ -28,6 +28,9 @@ router.get("/services/certifications", getCertificationPrograms);
 router.get("/services/freelancing", getFreelancingPrograms);
 router.get("/services/job-placements", getJobPlacements);
 router.get("/services/web-software/:pageType", getWebServiceContent);
+router.get("/services/creative-marketing/:pageType", getWebServiceContent);
+router.get("/services/content-seo/:pageType", getWebServiceContent);
+router.get("/services/ai-managed/:pageType", getWebServiceContent);
 
 // 🛡️ Admin Routes (Super Admin Only)
 router.use(protect);
@@ -83,5 +86,8 @@ router.delete("/services/job-placements/:id", deleteJobPlacement);
 
 // 💻 Web & Software Services
 router.put("/services/web-software/:pageType", updateWebServiceContent);
+router.put("/services/creative-marketing/:pageType", updateWebServiceContent);
+router.put("/services/content-seo/:pageType", updateWebServiceContent);
+router.put("/services/ai-managed/:pageType", updateWebServiceContent);
 
 module.exports = router;

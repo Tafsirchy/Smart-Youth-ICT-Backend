@@ -21,7 +21,15 @@ const WebServiceContentSchema = new mongoose.Schema(
         "automation",
         "hosting",
         "maintenance",
-        "hire-student"
+        "hire-student",
+        "web-development",
+        "mobile-app-development",
+        "digital-marketing",
+        "cloud-services",
+        "cybersecurity",
+        "data-analytics",
+        "ai-solutions",
+        "it-consulting"
       ]
     },
     // Landing (Main) Page Content

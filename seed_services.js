@@ -1,6 +1,200 @@
 const mongoose = require("mongoose");
 require("dotenv").config();
 const WebServiceContent = require("./src/models/WebServiceContent");
+const ServicePageContent = require("./src/models/ServicePageContent");
+
+const careerSeedData = [
+  {
+    pageType: "skill-development",
+    hero: {
+      badge: "Future-Proof Your Career",
+      title: "Skill Development",
+      subtitle: "Courses",
+      description: "Master the most in-demand technical skills through our industrial-grade training programs. Designed by experts, delivered for results."
+    },
+    methodology: [
+      { title: "Project-Based Learning", description: "Learn by building real-world applications used in production environments." },
+      { title: "Expert Mentorship", description: "Direct access to senior developers and designers for code reviews and guidance." },
+      { title: "Industrial Standards", description: "Curriculum aligned with current industry best practices and modern tech stacks." }
+    ],
+    cta: { title: "Start Your Learning Journey Today", description: "Join 5000+ students already scaling their careers with SYICT.", buttonText: "Explore Courses" },
+    details: {
+      hero: {
+        badge: "Pedagogical Manifest",
+        title: "Industrial Learning",
+        desc: "Education at SYICT is not theoretical. We treat skill acquisition as an engineering discipline, focusing on production-readiness and architectural integrity."
+      },
+      sections: {
+        phases: [
+          { step: "01", stage: "Foundational Logic", action: "Establishing deep understanding of core programming principles and algorithmic thinking." },
+          { step: "02", stage: "Framework Mastery", action: "Intensive deep-dives into industry-standard frameworks like Next.js, Django, or TensorFlow." },
+          { step: "03", stage: "Project Architecture", action: "Learning how to structure complex applications using atomic design and clean code standards." },
+          { step: "04", stage: "Production Sprint", action: "Building a full-scale application that meets production-grade performance and security benchmarks." },
+          { step: "05", stage: "Code Review Beta", action: "Rigorous reviews by senior developers to eliminate technical debt and optimize logic." },
+          { step: "06", stage: "Final Deployment", action: "Launching your capstone project to live edge networks with full monitoring." }
+        ],
+        roi: [
+          { group: "Tech Stack Tier", items: ["Advanced TypeScript", "State Management (Redux/Zustand)", "API Design (REST/GraphQL)", "Cloud Deployment"] },
+          { group: "Professional Tier", items: ["Git Workflow Mastery", "Agile/Scrum Experience", "Documentation Standards", "Technical Blogging"] },
+          { group: "Integrity Tier", items: ["Industry Certifications", "Blockchain-Verified Credentials", "Mentor Endorsements", "Alumni Network Access"] }
+        ]
+      },
+      cta: { title: "Initialize Learning Protocol" }
+    }
+  },
+  {
+    pageType: "career-tracks",
+    hero: {
+      badge: "Zero to Hero Roadmap",
+      title: "Career Tracks",
+      subtitle: "(Web, AI, SMM)",
+      description: "Structured paths designed to take you from beginner to professional in record time. Focused, intense, and career-oriented."
+    },
+    methodology: [
+      { title: "Structured Curriculum", description: "No more guessing what to learn next. Follow our proven path to success." },
+      { title: "Portfolio Building", description: "Build a professional portfolio that stands out to recruiters." },
+      { title: "Job Readiness", description: "Interview prep, resume building, and soft skills training included." }
+    ],
+    cta: { title: "Ready to launch your career?", description: "Choose your track and start your transformation.", buttonText: "View Tracks" },
+    details: {
+      hero: {
+        badge: "Career Architecture Manifest",
+        title: "Professional Trajectories",
+        desc: "We don't just teach code; we architect careers. Our tracks are designed by industry veterans to meet the exact demands of modern hiring managers."
+      },
+      sections: {
+        phases: [
+          { step: "01", stage: "Path Selection", action: "Initial assessment to match your strengths with the most profitable career trajectories." },
+          { step: "02", stage: "Curriculum Deep-Dive", action: "Progressing through a curated series of modules designed for maximum skill density." },
+          { step: "03", stage: "Full-Stack Project", action: "Developing a comprehensive portfolio piece that demonstrates end-to-end expertise." },
+          { step: "04", stage: "Personal Branding", action: "Optimizing GitHub, LinkedIn, and your professional portfolio for peak visibility." },
+          { step: "05", stage: "Technical Interview Prep", action: "Simulated whiteboard sessions and architectural discussions with senior leads." },
+          { step: "06", stage: "Market Placement", action: "Direct introductions to our partner network of 200+ global tech companies." }
+        ],
+        roi: [
+          { group: "Track Tier", items: ["Web Engineering", "Artificial Intelligence", "Digital Marketing", "Software Mastery"] },
+          { group: "Success Metrics", items: ["Average $15k+ Raise", "92% Placement Rate", "Zero-to-Job in 6 Months", "High-Value Networking"] },
+          { group: "Support Tier", items: ["Lifetime Resume Access", "Permanent Mentor Bridge", "Alumni Job Board", "Quarterly Skill Sync"] }
+        ]
+      },
+      cta: { title: "Activate Career Protocol" }
+    }
+  },
+  {
+    pageType: "certifications",
+    hero: {
+      badge: "Validate Your Skills",
+      title: "Certifications",
+      subtitle: "Professional",
+      description: "Obtain industry-recognized certifications that prove your expertise to employers worldwide."
+    },
+    methodology: [
+      { title: "Rigorous Assessment", description: "Our certifications are earned, not bought. Real-world testing ensures quality." },
+      { title: "Industry Recognition", description: "Highly valued by top tech companies and recruiting agencies." },
+      { title: "Digital Verification", description: "Blockchain-verified certificates that are impossible to forge." }
+    ],
+    cta: { title: "Get Certified Now", description: "Elevate your professional profile with SYICT credentials.", buttonText: "View Programs" },
+    details: {
+      hero: {
+        badge: "Validation Manifest",
+        title: "Credential Integrity",
+        desc: "A SYICT certification is a stamp of technical excellence. We utilize rigorous, project-based testing to ensure our credentials remain the gold standard."
+      },
+      sections: {
+        phases: [
+          { step: "01", stage: "Eligibility Scan", action: "Verification of prerequisite project completions and foundational knowledge scores." },
+          { step: "02", stage: "Theory Assessment", action: "Automated examination of core architectural principles and technical concepts." },
+          { step: "03", stage: "Live Coding Lab", action: "Time-constrained coding challenge supervised by our automated integrity engine." },
+          { step: "04", stage: "Project Submission", action: "Final production project audit based on a randomized technical brief." },
+          { step: "05", stage: "Peer & Mentor Review", action: "Blind review process by our senior board to ensure impartial quality grading." },
+          { step: "06", stage: "Blockchain Issuance", action: "Minting your unique, immutable certificate on the secure ledger." }
+        ],
+        roi: [
+          { group: "Credential Tier", items: ["Full-Stack Certified", "AI Implementation Lead", "Elite SMM Architect", "UI Design Expert"] },
+          { group: "Security Tier", items: ["Blockchain Verified", "Dynamic QR Sync", "Permanent Ledger Record", "Fraud-Proof Design"] },
+          { group: "Authority Tier", items: ["Global Industry Recognition", "Partner Network Priority", "Verified GitHub Badge", "LinkedIn Auto-Sync"] }
+        ]
+      },
+      cta: { title: "Initialize Certification" }
+    }
+  },
+  {
+    pageType: "freelancing",
+    hero: {
+      badge: "Master the Market",
+      title: "Freelancing Training",
+      subtitle: "Independent",
+      description: "Learn how to build a successful freelancing business on Upwork, Fiverr, and beyond. Master the art of the pitch."
+    },
+    methodology: [
+      { title: "Profile Optimization", description: "Build profiles that attract high-paying clients and standing out from the crowd." },
+      { title: "Bidding Strategies", description: "Write winning proposals that convert prospects into paying clients." },
+      { title: "Client Management", description: "Learn how to manage expectations and secure 5-star reviews every time." }
+    ],
+    cta: { title: "Start Earning Today", description: "Turn your skills into a profitable independent business.", buttonText: "Join Training" },
+    details: {
+      hero: {
+        badge: "Market Sovereignty Manifest",
+        title: "Independent Success",
+        desc: "Freelancing is a business, not a hobby. We teach you the high-vibration bidding and management strategies used by Top-Rated freelancers globally."
+      },
+      sections: {
+        phases: [
+          { step: "01", stage: "Market Analysis", action: "Identifying high-ticket niches and analyzing top-competitor profile architectures." },
+          { step: "02", stage: "Identity Engineering", action: "Building a magnetic Upwork/Fiverr profile that commands high hourly rates." },
+          { step: "03", stage: "Proposal Orchestration", action: "Mastering the 'Psychology of the Pitch' to convert total strangers into clients." },
+          { step: "04", stage: "Project Management", action: "Implementing professional reporting and communication loops for 5-star success." },
+          { step: "05", stage: "Scaling & Outsourcing", action: "learning how to transition from an individual freelancer to an agency lead." },
+          { step: "06", stage: "Financial Security", action: "Setting up global payment gates and tax-compliant independent structures." }
+        ],
+        roi: [
+          { group: "Market Tier", items: ["Upwork Top Rated", "Fiverr Pro Path", "Direct Client Outreach", "LinkedIn Presence"] },
+          { group: "Strategy Tier", items: ["Winning Proposal Bank", "Bidding Automation", "Contract Protection", "Crisis Management"] },
+          { group: "Earning Tier", items: ["Target $5k+/Month", "Escrow Protection", "Global Payment Rails", "Revenue Diversification"] }
+        ]
+      },
+      cta: { title: "Activate Freelance Protocol" }
+    }
+  },
+  {
+    pageType: "job-placement",
+    hero: {
+      badge: "The Final Bridge",
+      title: "Job Placement",
+      subtitle: "Career Support",
+      description: "We don't just train; we connect. Leverage our network of 200+ partner companies to find your dream role."
+    },
+    methodology: [
+      { title: "Direct Referrals", description: "Skip the queue with direct introductions to hiring managers in our partner network." },
+      { title: "Interview Coaching", description: "Mock interviews and feedback sessions to sharpen your performance." },
+      { title: "Permanent Support", description: "Our career services don't end after your first job. We support your growth journey." }
+    ],
+    cta: { title: "Secure Your Future", description: "Let us help you find the perfect match for your skills.", buttonText: "Contact Placement" },
+    details: {
+      hero: {
+        badge: "Placement Manifest",
+        title: "Career Bridge",
+        desc: "The transition from student to professional is the most critical phase. We act as your permanent career agent, connecting you with elite opportunities."
+      },
+      sections: {
+        phases: [
+          { step: "01", stage: "Placement Audit", action: "Final technical and soft-skill audit to ensure you meet partner hire standards." },
+          { step: "02", stage: "Targeting Strategy", action: "Curating a list of compatible companies and roles based on your tech-stack." },
+          { step: "03", stage: "Direct Introduction", action: "Facilitating direct bridge interviews with hiring managers in our network." },
+          { step: "04", stage: "Negotiation Support", action: "Providing guidance on salary benchmarking and contract term optimization." },
+          { step: "05", stage: "Onboarding Bridge", action: "Assisting with your first 30 days in the new role to ensure cultural fit." },
+          { step: "06", stage: "Growth Retention", action: "Persistent career check-ins to support your journey to Senior and Lead roles." }
+        ],
+        roi: [
+          { group: "Network Tier", items: ["200+ Partner Firms", "Direct HR Inroads", "Internal Job Board", "Priority Placement"] },
+          { group: "Coaching Tier", items: ["CTO Mock Interviews", "Salary Negotiation", "Resume Overhaul", "Soft Skill Polish"] },
+          { group: "Support Tier", items: ["Infinite Re-Placement", "Senior Career Paths", "Relocation Guidance", "Visa Sponsorship Sync"] }
+        ]
+      },
+      cta: { title: "Request Placement Bridge" }
+    }
+  }
+];
 
 const seedData = [
   {
@@ -79,17 +273,24 @@ const seedData = [
         mainImage: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=1000&h=800&fit=crop",
       },
       sections: {
+        verticalsHeader: { badge: "Industrial Standard", title: "Architectures built for", focus: "conversion & scale." },
         verticals: [
           { title: "Startup & SaaS", desc: "Built for speed and conversion. We engineer aggressive growth funnels designed to turn traffic into trial users instantly.", icon: "Rocket", color: "from-blue-500 to-blue-600", border: "border-blue-100" },
           { title: "Enterprise Corporate", desc: "Stability and brand authority. High-security, multi-lingual architectures designed for investor relations and global presence.", icon: "Business", color: "from-slate-700 to-slate-800", border: "border-slate-100" },
           { title: "Professional Agency", desc: "Service-centric storytelling. We build elegant lead-generation hubs designed to showcase expertise and qualify high-value clients.", icon: "Briefcase", color: "from-cyan-500 to-blue-500", border: "border-cyan-100" }
         ],
+        logistics: {
+          title: "Unified Logistics.",
+          description: "We eliminate technical silos. Your website becomes the central node for your CRM, payments, and marketing automation.",
+          badge: "Infrastructure_Health"
+        },
         integrations: [
           { t: "CRM Sync", d: "HubSpot, Salesforce, Zoho integration.", icon: "GitNetwork" },
           { t: "Payment Gateways", d: "Stripe, SSLCommerz, PayPal native.", icon: "Globe" },
           { t: "Marketing Automations", d: "Mailchimp, Resend, Meta Pixel.", icon: "Analytics" },
           { t: "Uptime Shield", d: "24/7 Monitoring & DDoS protection.", icon: "Shield" }
         ],
+        pricingHeader: { badge: "Scaling Tiers", title: "Bespoke investment", focus: "for results." },
         pricing: [
           { t: "Standard Business", p: "$1499", list: ["SME Focused Strategy", "100ms Edge Load", "Mobile Responsive Architecture", "Core SEO Pack", "24/7 Security Shield"], color: "slate", highlight: false },
           { t: "Growth Pro", p: "$3499", list: ["CRM Flow Integration", "A/B Conversion Testing", "Multi-Language Support", "Advanced ROI Dashboard", "Dedicated Architect Access"], color: "blue", highlight: true },
@@ -105,6 +306,12 @@ const seedData = [
           { title: "ROI Convergence", desc: "Our engines are built with a single KPI in mind: Conversion. By isolating common friction points in standard builders, we reduce bounce rates by up to 64% from the first month.", icon: "Stats", features: ["Behavioral Heatmapping", "Zero-Friction Forms", "Fast-Action CTAs"] },
           { title: "Technical Integrity", desc: "Native SSR (Server-Side Rendering) ensures that Google sees every byte of your content instantly, granting you an immediate technical SEO advantage.", icon: "Chip", features: ["Type-Safe Production", "Edge CDN Caching", "Atomic Code Standards"] }
         ],
+        extraInfo: {
+          title: "Operationally Atomic.",
+          description: "We deliver more than a website. We deliver a high-velocity business asset isolated from the common friction of monolithic CMS builders.",
+          securityBadge: "Security Protocol",
+          securityValue: "Standard SSL + DDoS Shield Active"
+        },
         manifest: [
           { label: "Core Architecture", value: "Next.js 14 + TypeScript" },
           { label: "Data Management", value: "Server-Side Rendering (SSR)" },
@@ -113,6 +320,7 @@ const seedData = [
           { label: "Security Layer", value: "SSL + DDoS Mitigation" },
           { label: "Analytics Stack", value: "GTM + Custom ROI Tracking" }
         ],
+        checklistHeader: { title: "Corporate", focus: "Handover Assets." },
         checklist: [
           { t: "Brand Identity Asset Bundle", d: "High-resolution logos, brand color codes (HEX/RGB), and corporate fonts." },
           { t: "Service Hierarchy Document", d: "Complete breakdown of services, pricing tiers, and organizational structure." },
@@ -483,6 +691,241 @@ const seedData = [
       },
       cta: { title: "Ready to initialize your Visibility Brief?" }
     }
+  },
+  {
+    pageType: "chatbot",
+    landing: {
+      hero: {
+        badge: "Conversational Intelligence Protocol",
+        title: "AI Chatbots",
+        description: "We don't build scripts; we engineer synthetic empathy. Our AI agents are designed to resolve queries, qualify leads, and scale your customer experience 24/7 without fatigue.",
+      },
+      sections: {
+        verticals: [
+          { title: "Customer Support (L1/L2)", desc: "Automating repetitive queries with 95% accuracy using RAG-based knowledge banks.", icon: "Chatbubbles", color: "from-purple-500 to-indigo-600" },
+          { title: "Lead Generation Bot", desc: "Interactive qualifiers that capture user intent and push warm leads directly to your CRM.", icon: "Flash", color: "from-blue-600 to-cyan-500" },
+          { title: "Agentic AI Assistants", desc: "Sophisticated agents capable of executing tasks across your software stack via API calls.", icon: "Shield", color: "from-slate-700 to-slate-900" }
+        ],
+        integrations: [
+          { t: "LLM Orchestration", d: "GPT-4o, Claude 3, and Llama 3 native sync.", icon: "Analytics" },
+          { t: "Vector Memory", d: "Pinecone / Milvus for long-term RAG recall.", icon: "Layers" },
+          { t: "Platform Bridging", d: "WhatsApp, Telegram & Web Messenger.", icon: "Globe" },
+          { t: "Security Shield", d: "PII masking and SOC2 compliant data handling.", icon: "Shield" }
+        ],
+        pricing: [
+          { t: "Standard Agent", p: "$999", list: ["RAG Knowledge Base", "Basic API Actions", "Web Integration", "Standard Analytics", "Monthly Tuning"], color: "slate", highlight: false },
+          { t: "Predictive Pro", p: "$2499", list: ["Advanced Persona Logic", "Omnichannel Bridge", "Complex Tool-use", "Custom Memory Layer", "Priority SLA"], color: "purple", highlight: true },
+          { t: "Enterprise Brain", p: "Custom", list: ["Full On-premise Deploy", "Proprietary Fine-tuning", "Whitelabel Dashboard", "Direct Engineer Access", "SLA Performance Bond"], color: "indigo", highlight: false }
+        ]
+      },
+      cta: { title: "Ready to scale your Intelligence?" }
+    },
+    details: {
+      hero: { badge: "Technical Specification Protocol", title: "Cognitive Integrity", description: "Technical manifest of our AI conversational engines." },
+      sections: {
+        roi: [
+          { title: "Latency Reduction", desc: "Average response times under 800ms for RAG-based queries.", icon: "Flash", features: ["Semantic Caching", "Parallelized Inference", "Edge Token Streaming"] },
+          { title: "Resolution Accuracy", desc: "98% hallucination-free responses through rigorous prompt engineering.", icon: "Shield", features: ["Truth Discovery Logic", "Source Attributions", "Automated Guardrails"] }
+        ],
+        manifest: [
+          { label: "Core Model", value: "GPT-4o / Claude 3.5 Sonnet / Llama 3" },
+          { label: "Memory Architecture", value: "Vector RAG (Retrieval-Augmented Generation)" },
+          { label: "Deployment", value: "Serverless Edge / Dockerized GPU" },
+          { label: "Data Pipeline", value: "Real-time PDF/Web Scraping" },
+          { label: "Interface", value: "React Native / WebSocket Streams" },
+          { label: "Compliance", value: "PII Masking & Data Residency" }
+        ]
+      },
+      cta: { title: "Initialize Your AI Agent." }
+    }
+  },
+  {
+    pageType: "automation",
+    landing: {
+      hero: {
+        badge: "Operational Efficiency Protocol",
+        title: "Workflow Automation",
+        description: "We eliminate the 'human tax' on repetitive tasks. Our automation engines bridge your software stack, creating seamless, hands-free operational flows.",
+      },
+      sections: {
+        verticals: [
+          { title: "Data Pipeline Automation", desc: "Synchronizing data between CRMs, Sheets, and internal databases in real-time.", icon: "Sync", color: "from-blue-600 to-indigo-700" },
+          { title: "RPA (UI Automation)", desc: "Bot-driven navigation of legacy web apps that lack official API support.", icon: "Briefcase", color: "from-slate-700 to-slate-900" },
+          { title: "DevOps Pipelines", desc: "Automated testing, deployment, and infrastructure scaling triggers.", icon: "Flash", color: "from-cyan-500 to-blue-600" }
+        ],
+        integrations: [
+          { t: "Zapier / Make.com", d: "Sophisticated multi-step workflow logic.", icon: "GitNetwork" },
+          { t: "Internal Custom Hooks", d: "Proprietary event bridges built for speed.", icon: "Code" },
+          { t: "Cloud Triggers", d: "AWS EventBridge & GCP Cloud Functions.", icon: "CloudUpload" },
+          { t: "Legacy Bridging", d: "Connecting old databases to modern apps.", icon: "Layers" }
+        ],
+        pricing: [
+          { t: "Essential Flow", p: "$1299", list: ["5 Advanced Workflows", "30-Min Event Pulse", "Basic Error Logging", "Standard API Access", "Email Support"], color: "slate", highlight: false },
+          { t: "Industrial Engine", p: "$3499", list: ["Unlimited Workflows", "Real-time Webhooks", "Complex Logic Branching", "Custom Health Dashboard", "Priority Support"], color: "blue", highlight: true },
+          { t: "Global Enterprise", p: "Custom", list: ["Custom Internal Tooling", "On-premise Deployment", "Military-grade Security", "Full Systems Audit", "SLA Guardrails"], color: "indigo", highlight: false }
+        ]
+      },
+      cta: { title: "Ready to automate your future?" }
+    },
+    details: {
+      hero: { badge: "Technical Specification Protocol", title: "Efficiency Logic", description: "Technical manifest of our automation engines." },
+      sections: {
+        roi: [
+          { title: "Labor Reduction", desc: "Average saving of 40+ hours per week per department.", icon: "Timer", features: ["Hands-free Data Entry", "Automated Reporting", "Instant Notifications"] },
+          { title: "Error Mitigation", desc: "Reducing human data entry errors to practically zero percent.", icon: "Shield", features: ["Validation Logic", "Atomic Transactions", "Failure Recovery"] }
+        ],
+        manifest: [
+          { label: "Engine Hub", value: "Node.js / Python / n8n / Zapier" },
+          { label: "Integration Layer", value: "REST / GraphQL / Webhooks" },
+          { label: "Infrastructure", value: "AWS Lambda / Docker" },
+          { label: "Logging Protocol", value: "Sentry / Winston / ELK Stack" },
+          { label: "Security", value: "AES-256 / OAuth2" },
+          { label: "Performance", value: "Concurrent Job Processing" }
+        ]
+      },
+      cta: { title: "Start Your Automation Audit." }
+    }
+  },
+  {
+    pageType: "hosting",
+    landing: {
+      hero: {
+        badge: "Infrastructure Stability Protocol",
+        title: "Managed Hosting",
+        description: "We don't just host; we safeguard your digital presence. Our specialized hosting solutions are engineered for zero-downtime, sub-second latency, and horizontal scalability.",
+      },
+      sections: {
+        verticals: [
+          { title: "Managed Cloud (AWS/GCP)", desc: "Tailored infrastructure management with automated scaling and redundant failover systems.", icon: "Cloud", color: "from-blue-600 to-indigo-700" },
+          { title: "Static Edge Hosting", desc: "Vercel-integrated global edge deployment for near-instant global content delivery.", icon: "Globe", color: "from-slate-700 to-slate-900" },
+          { title: "High-Traffic WordPress", desc: "Specialized tuning for high-traffic WP sites with server-level caching and security hardening.", icon: "Shield", color: "from-cyan-500 to-blue-600" }
+        ],
+        integrations: [
+          { t: "Vercel Edge", d: "Leading-edge serverless deployment logic.", icon: "Globe" },
+          { t: "AWS S3 / CloudFront", d: "Industrial asset storage and delivery.", icon: "Layers" },
+          { t: "Cloudflare Warp", d: "Superior DDoS protection and WAF logic.", icon: "Shield" },
+          { t: "GitHub Actions", d: "Seamless CI/CD deployment pipelines.", icon: "Code" }
+        ],
+        pricing: [
+          { t: "Standard Cloud", p: "$49/mo", list: ["Managed Updates", "Weekly Backups", "SSL Certification", "Basic Monitoring", "Email Support"], color: "slate", highlight: false },
+          { t: "Performance Pro", p: "$149/mo", list: ["Daily Backups", "Edge CDN Integration", "DDoS Protection", "Priority Monitoring", "24/7 Priority Support"], color: "blue", highlight: true },
+          { t: "Enterprise Dedicated", p: "Custom", list: ["Dedicated VPC", "Custom Scaling Polices", "SLA Performance Bond", "Full Systems Audit", "Direct Admin Access"], color: "indigo", highlight: false }
+        ]
+      },
+      cta: { title: "Ready for stable infrastructure?" }
+    },
+    details: {
+      hero: { badge: "Technical Specification Protocol", title: "Infrastructure Integrity", description: "Technical manifest of our managed hosting solutions." },
+      sections: {
+        roi: [
+          { title: "Uptime Maintenance", desc: "99.99% operational uptime guaranteed through multi-region redundancy.", icon: "Timer", features: ["Automated Failover", "Global Ping Monitoring", "Redundant Storage"] },
+          { title: "Latency Reduction", desc: "Reducing TTFB to under 100ms globally through edge caching.", icon: "Flash", features: ["Image Optimization", "Static Site Generation", "Global CDN"] }
+        ],
+        manifest: [
+          { label: "Cloud Provider", value: "AWS / Google Cloud / Vercel" },
+          { label: "Security Layer", value: "Cloudflare WAF / SSL v3" },
+          { label: "Monitoring", value: "Datadog / New Relic / Grafana" },
+          { label: "Storage Architecture", value: "NVMe SSD / S3 Persistent" },
+          { label: "Network", value: "Global Anycast Edge" },
+          { label: "Backup Protocol", value: "Immutable Hourly Snapshots" }
+        ]
+      },
+      cta: { title: "Start Your Infrastructure Audit." }
+    }
+  },
+  {
+    pageType: "maintenance",
+    landing: {
+      hero: {
+        badge: "Systems Continuity Protocol",
+        title: "Support & Maintenance",
+        description: "We don't just fix bugs; we maintain momentum. Our proactive maintenance cycles ensure your software stays secure, fast, and ahead of the competition.",
+      },
+      sections: {
+        verticals: [
+          { title: "Security Patching", desc: "Rapid deployment of security updates and dependency hardening to prevent vulnerabilities.", icon: "Shield", color: "from-slate-700 to-slate-900" },
+          { title: "Performance Tuning", desc: "Continuous monitoring and optimization of database queries and client-side performance.", icon: "Flash", color: "from-amber-500 to-orange-600" },
+          { title: "Software Modernization", desc: "Incremental updates to keep your tech stack aligned with the latest industry standards.", icon: "Refresh", color: "from-blue-600 to-indigo-700" }
+        ],
+        integrations: [
+          { t: "Sentry / LogRocket", d: "Real-time error tracking and session replay.", icon: "Analytics" },
+          { t: "StatusGator", d: "Public-facing uptime status pages.", icon: "Globe" },
+          { t: "GitHub Automerge", d: "Continuous dependency update logic.", icon: "Code" },
+          { t: "Pingdom", d: "Global synthetic monitoring alerts.", icon: "Shield" }
+        ],
+        pricing: [
+          { t: "Core Guard", p: "$299/mo", list: ["Security Updates", "Weekly Backups", "Bug Fixes (4hrs)", "Uptime Monitoring", "Monthly Health Report"], color: "slate", highlight: false },
+          { t: "Ops Excellence", p: "$899/mo", list: ["Priority Patching", "Daily Backups", "Performance Tuning", "Bug Fixes (12hrs)", "Dedicated Support Lead"], color: "amber", highlight: true },
+          { t: "Enterprise Elite", p: "Custom", list: ["24/7 Direct Access", "Infinite Scaling Support", "Full Security Audits", "Custom Feature Sprints", "SLA Guardrails"], color: "indigo", highlight: false }
+        ]
+      },
+      cta: { title: "Ready for proactive support?" }
+    },
+    details: {
+      hero: { badge: "Technical Specification Protocol", title: "Stability Logic", description: "Technical manifest of our maintenance and support protocols." },
+      sections: {
+        roi: [
+          { title: "Downtime Prevention", desc: "Stop issues before they affect users with predictive monitoring.", icon: "Shield", features: ["Anomaly Detection", "Automated Rollbacks", "Log Correlation"] },
+          { title: "Security Longevity", desc: "Ensuring your software remains compliant and secure year over year.", icon: "LockClosed", features: ["Dependency Audits", "Vulnerability Scanning", "Compliance Map"] }
+        ],
+        manifest: [
+          { label: "Monitoring Stack", value: "Sentry / Datadog / Prometheus" },
+          { label: "Update Cycle", value: "Bi-Weekly Production Sprints" },
+          { label: "Backup Frequency", value: "Hourly / Daily / Monthly" },
+          { label: "Security Protocol", value: "OWASP Top 10 Hardening" },
+          { label: "Ticket SLA", value: "4h / 12h / 24h Response" },
+          { label: "Report Delivery", value: "Automated via Slack/Email" }
+        ]
+      },
+      cta: { title: "Start Your Support Brief." }
+    }
+  },
+  {
+    pageType: "hire-student",
+    landing: {
+      hero: {
+        badge: "Emerging Talent Protocol",
+        title: "Hire Student Talents",
+        description: "Inject fresh perspective and cutting-edge energy into your projects. Access the top 1% of our mentored graduates, trained in the latest industrial standards.",
+      },
+      sections: {
+        verticals: [
+          { title: "Junior Web Devs", desc: "Full-stack capable juniors mentored in Next.js, Node, and modern clean-code principles.", icon: "Code", color: "from-blue-600 to-indigo-700" },
+          { title: "Creative Designers", desc: "Fresh eyes trained in UI/UX psychology and modern \"Industrial Luxury\" design aesthetics.", icon: "Palette", color: "from-rose-500 to-pink-600" },
+          { title: "Social Content Leads", desc: "Natives of the scroll, trained in algorithmic strategy and high-fidelity asset creation.", icon: "Images", color: "from-amber-500 to-orange-600" }
+        ],
+        integrations: [
+          { t: "Skill Verification", d: "Verified portfolio and code review history.", icon: "Shield" },
+          { t: "Mentorship Bridge", d: "Ongoing support from SYICT senior leads.", icon: "People" },
+          { t: "Rapid Handoff", d: "Pre-onboarded on professional tools.", icon: "Flash" },
+          { t: "Culture Alignment", d: "Trained in professional communication.", icon: "Globe" }
+        ],
+        pricing: [
+          { t: "Project Intern", p: "$Varies", list: ["Limited Term Access", "Specific Task Focus", "Monthly Progress Review", "SYICT Senior Oversite", "Flexible Hours"], color: "slate", highlight: false },
+          { t: "Junior Retainer", p: "$Varies", list: ["Part-time (20hrs/wk)", "Integrated Workflow", "Skill Growth Roadmap", "Weekly Mentor Sync", "Direct Slack Access"], color: "blue", highlight: true },
+          { t: "Direct Placement", p: "Fee-based", list: ["Full-time Recruitment", "Validated Skillset", "Background Vetting", "3-Month Guarantee", "Smooth Handoff Protocol"], color: "indigo", highlight: false }
+        ]
+      },
+      cta: { title: "Ready to hire next-gen talent?" }
+    },
+    details: {
+      hero: { badge: "Technical Specification Protocol", title: "Talent Integrity", description: "Technical manifest of our student mentorship and placement protocol." },
+      sections: {
+        roi: [
+          { title: "Innovation Injection", desc: "Bring modern techniques and fresh enthusiasm to your internal team.", icon: "Sparkles", features: ["Fast Adaptability", "Modern Stack Native", "High Energy"] },
+          { title: "Cost Efficiency", desc: "Acquire high-potential talent at an optimized investment entry point.", icon: "Stats", features: ["Low Overhead", "Mentored Growth", "Proven Performance"] }
+        ],
+        manifest: [
+          { label: "Curation Ratio", value: "Top 5% of Graduates" },
+          { label: "Mentorship Hours", value: "500+ Hours Live Project Training" },
+          { label: "Tech Proficiency", value: "Next.js / Tailwind / Node / Figma" },
+          { label: "Soft Skills", value: "Client-facing Communication" },
+          { label: "Vetting Process", value: "Code Review + Psychology Profile" },
+          { label: "Support Bridge", value: "Direct Line to SYICT Seniors" }
+        ]
+      },
+      cta: { title: "Start Your Talent Brief." }
+    }
   }
 ];
 
@@ -497,6 +940,16 @@ async function seed() {
       { upsert: true, new: true, runValidators: false } // Relax validators for seeding mixed types
     );
     console.log(`Seeded: ${item.pageType}`);
+  }
+
+  console.log("Seeding ServicePageContent...");
+  for (const item of careerSeedData) {
+    await ServicePageContent.findOneAndUpdate(
+      { pageType: item.pageType },
+      item,
+      { upsert: true, new: true, runValidators: false }
+    );
+    console.log(`Seeded Page Content: ${item.pageType}`);
   }
   
   process.exit();
