@@ -353,6 +353,12 @@ const seedData = [
           { t: "Global Logistics", d: "Automated Pathao, ShipStation & DHL integration.", icon: "Globe" },
           { t: "Fraud Shield", d: "AI-driven order verification & fraud prevention.", icon: "Shield" }
         ],
+        metrics: [
+          { t: "Payment Logistics", d: "Native SSLCommerz, bKash, Nagad & Stripe sync.", icon: "Card" },
+          { t: "Inventory Protocol", d: "Real-time sync with ERP & Warehouse systems.", icon: "GitNetwork" },
+          { t: "Global Logistics", d: "Automated Pathao, ShipStation & DHL integration.", icon: "Globe" },
+          { t: "Fraud Shield", d: "AI-driven order verification & fraud prevention.", icon: "Shield" }
+        ],
         pricing: [
           { t: "D2C Foundations", p: "$1999", list: ["Single Brand Architecture", "Native Mobile Speed", "Global Payment Gateways", "SEO Commerce Pack", "Standard Inventory Sync"], color: "slate", highlight: false },
           { t: "Aggressive Growth", p: "$4499", list: ["Headless Commerce Logic", "Advanced Cart Recovery", "Omni-channel Support", "High-Level ROI Dashboard", "Priority Logistics Sync"], color: "rose", highlight: true },
@@ -563,23 +569,37 @@ const seedData = [
           { title: "Atomic Prototyping", desc: "High-fidelity, interactive Figma handoffs. Experience the final product before a single line of code is written.", icon: "Flash", color: "from-rose-500 to-pink-600" }
         ],
         metrics: [
-          { t: "Atomic Design Specs" },
-          { t: "Design Tokens (JSON)" },
-          { t: "Figma Auto-Layout" },
-          { t: "Interaction Prototypes" },
-          { t: "Handoff Protocol" },
-          { t: "Light/Dark Schemas" }
+          { t: "Atomic Design Specs", d: "Highly scalable component systems.", icon: "Layers" },
+          { t: "Design Tokens (JSON)", d: "Code-synced style variables.", icon: "CodeSlash" },
+          { t: "Figma Auto-Layout", d: "Responsive design precision.", icon: "AppWindow" },
+          { t: "Interaction Prototypes", d: "Functional user flow testing.", icon: "CursorClick" },
+          { t: "Handoff Protocol", d: "Seamless developer documentation.", icon: "FileTrayFull" },
+          { t: "Light/Dark Schemas", d: "Adaptive visual environments.", icon: "ColorPalette" }
         ]
       },
       cta: { title: "Eliminate friction. Maximize Conversion." }
     },
     details: {
-      hero: { badge: "Technical Specification Protocol", title: "Product Architecture", description: "Technical Specifications for UI/UX Protocol" },
+      hero: { 
+        badge: "Technical Specification Protocol", 
+        title: "Product Architecture", 
+        description: "A deep-dive into our product engineering ecosystem, where cognitive psychology meets atomic design to create seamless, high-conversion user experiences.",
+        subtitle: "Design Manifest" 
+      },
       sections: {
-         roi: [
-          { title: "Cognitive Consistency", desc: "Predictable interaction patterns that reduce mental load.", icon: "Cube" },
-          { title: "Atomic Scalability", desc: "Reusable component libraries for rapid production scaling.", icon: "Shield" }
-         ]
+        roi: [
+          { group: "Behavioral Tier", items: ["Cognitive Load Sync", "Fitts' Law Adaptation", "Hick's Law Optimization", "Predictive Navigation"] },
+          { group: "Scaling Tier", items: ["Atomic Library Logic", "Prop-Driven Components", "Multi-Tenant Theming", "Design Token Sync"] },
+          { group: "Engineering Tier", items: ["Developer Hand-off JSON", "Variable-Grid Systems", "WCAG 2.1 Accessibility", "Responsive Breakpoint Logic"] }
+        ],
+        phases: [
+          { step: "DESIGN_01", stage: "Heuristic Evaluation", action: "Auditing existing interfaces against usability benchmarks and identifying friction points." },
+          { step: "DESIGN_02", stage: "Info Architecture", action: "Mapping the hierarchical structure of information and core user navigation flows." },
+          { step: "DESIGN_03", stage: "Low-Fi Logic", action: "Prototyping wireframes to validate spatial relationships and interaction logic." },
+          { step: "DESIGN_04", stage: "High-Fi Craft", action: "Applying visual identity, typography, and color theory to the validated structure." },
+          { step: "DESIGN_05", stage: "Interactive Testing", action: "Developing functional prototypes to simulate real-world user interactions." },
+          { step: "DESIGN_06", stage: "Developer Sync", action: "Exporting atomic assets and implementation manifests for seamless engineering." }
+        ]
       },
       cta: { title: "Ready to activate your Product Presence?" }
     }
@@ -599,23 +619,37 @@ const seedData = [
           { title: "Brand Consistency", desc: "Engineering a unified visual language across all social touchpoints to build recognition and elite positioning.", icon: "Palette", color: "from-amber-500 to-rose-600" }
         ],
         metrics: [
-          { t: "Short-form Content Sprints" },
-          { t: "Carousel Storytelling" },
-          { t: "Algorithmic Hook Mapping" },
-          { t: "Viral Asset Auditing" },
-          { t: "Cross-Platform Resizing" },
-          { t: "Community Interaction Assets" }
+          { t: "Short-form Content Sprints", d: "High-volume video production cycles.", icon: "Film" },
+          { t: "Carousel Storytelling", d: "Multi-slide narrative architectures.", icon: "Images" },
+          { t: "Algorithmic Hook Mapping", d: "Data-driven visual entry points.", icon: "Flash" },
+          { t: "Viral Asset Auditing", d: "Performance analysis of creative variants.", icon: "Analytics" },
+          { t: "Cross-Platform Resizing", d: "Omnichannel visual adaptation.", icon: "Layers" },
+          { t: "Community Interaction Assets", d: "Dynamic reply and engagement visuals.", icon: "Chatbubbles" }
         ]
       },
       cta: { title: "Stop being ignored. Command the Feed." }
     },
     details: {
-      hero: { badge: "Technical Specification Protocol", title: "Creative Integrity", description: "Technical highlights of the social creative engine." },
+      hero: { 
+        badge: "Technical Specification Protocol", 
+        title: "Creative Integrity", 
+        description: "A comprehensive manifest of our creative engineering protocols, designed for absolute viral predictability and cross-platform brand dominance.",
+        subtitle: "Creative Manifest" 
+      },
       sections: {
-         roi: [
-          { title: "Algorithmic Optimization", desc: "Assets tested against social platforms' current ranking signals.", icon: "Flash" },
-          { title: "Conversion Tracking", desc: "Attribution of creative performance to bottom-line ROI.", icon: "Stats" }
-         ]
+        roi: [
+          { group: "Engagement Tier", items: ["Algorithmic Optimization", "Scroll-Stop Benchmarking", "Retention Rate Sync", "Viral Trigger Mapping"] },
+          { group: "Psychology Tier", items: ["Dopamine Loop Design", "Color Theory Orchestration", "Micro-Typography Sprints", "Hick's Law Adaptation"] },
+          { group: "Omnichannel Tier", items: ["Platform-Native Resizing", "Trend-Cycle Alignment", "Influencer Asset Kits", "UGC Hybrid Strategy"] }
+        ],
+        phases: [
+          { step: "CREATE_01", stage: "Hook Research", action: "Analyzing current algorithmic trends and identifying high-performing visual triggers." },
+          { step: "CREATE_02", stage: "Prototyping", action: "Developing low-fidelity visual architectures to test color and composition balance." },
+          { step: "CREATE_03", stage: "Kinetic Production", action: "Executing high-density motion graphics and video assets with frame-by-frame precision." },
+          { step: "CREATE_04", stage: "Algorithm Tuning", action: "Optimizing assets for specific platform metadata and engagement triggers." },
+          { step: "CREATE_05", stage: "Deployment Sprints", action: "Launching high-volume testing batches to qualify highest-performing hooks." },
+          { step: "CREATE_06", stage: "Resonance Scaling", action: "Iterating on validated concepts to build sustainable long-term brand equity." }
+        ]
       },
       cta: { title: "Ready to activate your Social Engine?" }
     }
@@ -630,28 +664,40 @@ const seedData = [
       },
       sections: {
         pillars: [
-          { title: "Precision Targeting", desc: "Leveraging custom audiences, lookalikes, and behavioral interest mapping to ensure your budget hit the exact buyer persona.", icon: "People", color: "from-emerald-600 to-green-700" },
+          { title: "Precision Targeting", desc: "Leveraging custom audiences, lookalikes, and behavioral interest mapping to ensure your budget hits the exact buyer persona.", icon: "People", color: "from-emerald-600 to-green-700" },
           { title: "Conversion Funnels", desc: "Architecting multi-stage customer journeys from cold awareness to high-intent remarketing cycles.", icon: "Filter", color: "from-green-700 to-blue-800" },
           { title: "ROAS Optimization", desc: "Rigorous daily tracking of Return on Ad Spend (ROAS) and attribution modeling to maximize every dollar spent.", icon: "BarChart", color: "from-blue-600 to-emerald-700" }
         ],
         metrics: [
-          { t: "Custom conversion setups" },
-          { t: "Pixel & API Integration" },
-          { t: "ROAS Attribution Logic" },
-          { t: "LTV Forecasting" },
-          { t: "A/B Creative Sprints" },
-          { t: "Competitor Scale Audit" }
+          { t: "Pixel & API Integration", d: "Server-side tracking for 100% data accuracy.", icon: "Settings" },
+          { t: "ROAS Attribution Logic", d: "Mathematical modeling of conversion paths.", icon: "Analytics" },
+          { t: "LTV Forecasting", d: "Predicting lifetime value of ad-acquired users.", icon: "TrendingUp" },
+          { t: "A/B Creative Sprints", d: "Systematic testing of visual variants.", icon: "Flash" }
         ]
       },
       cta: { title: "Stop burning budget. Command the Feed." }
     },
     details: {
-      hero: { badge: "Technical Specification Protocol", title: "Ads Performance Audit", description: "Technical manifest of our ads engine." },
+      hero: { 
+        badge: "Technical Specification Protocol", 
+        title: "Ads Performance Audit", 
+        description: "A data-driven technical manifest of our advertising engines, engineered for precision targeting and aggressive ROAS scaling.",
+        subtitle: "Performance Specifications" 
+      },
       sections: {
-         roi: [
-          { title: "Multi-Region Scaling", desc: "Dynamic budget allocation across global markets.", icon: "Globe" },
-          { title: "Creative Integrity", desc: "Automated monitoring of ad fatigue and conversion shifts.", icon: "Shield" }
-         ]
+        roi: [
+          { group: "Performance Tier", items: ["Multi-Region Scaling", "Dynamic Budget Allocation", "ROAS Attribution Engine", "Bid Ceiling Logic"] },
+          { group: "Intelligence Tier", items: ["Custom Audience Scrapers", "Lookalike Entity Mapping", "Creative Fatigue Alerts", "Sentiment Trend Sync"] },
+          { group: "Interconnect Tier", items: ["CAPI (Conversions API)", "Pixel Server-side Sync", "CRM Lead-to-Sale Bridge", "UTM Auto-Orchestration"] }
+        ],
+        phases: [
+          { step: "ADS_01", stage: "Infrastructure Audit", action: "Verifying Pixel integrity, CAPI health, and domain verification status." },
+          { step: "ADS_02", stage: "Audience Architecture", action: "Mapping high-intent behavioral segments and lookalike seed entities." },
+          { step: "ADS_03", stage: "Creative Engineering", action: "Developing multi-variant visual assets designed for specific funnel stages." },
+          { step: "ADS_04", stage: "Deployment & Initial Learning", action: "Launching phased testing increments to qualify lead-cost benchmarks." },
+          { step: "ADS_05", stage: "Optimization Sprints", action: "Pruning low-performance nodes and scaling high-fidelity creative clusters." },
+          { step: "ADS_06", stage: "Global Scale-up", action: "Aggressive budget expansion into validated regions with automated safety guards." }
+        ]
       },
       cta: { title: "Ready to activate your Growth Brief?" }
     }
@@ -668,28 +714,40 @@ const seedData = [
         pillars: [
           { title: "Structural Authority", desc: "Optimizing your site's hierarchy and Core Web Vitals to ensure search engines can index your value with zero friction.", icon: "GitNetwork", color: "from-indigo-600 to-slate-700" },
           { title: "Semantic Mapping", desc: "Moving beyond keywords into entity-based SEO. We map your content to the underlying intent of your target audience.", icon: "Search", color: "from-slate-700 to-indigo-800" },
-          { title: "Growth Analytics", desc: "Real-time tracking of rank velocity, conversion attribution, and competitor movement to adjust strategy on the fly.", icon: "BarChart", color: "from-indigo-500 to-sky-600" }
+          { title: "Growth Analytics", desc: "Real-time tracking of rank velocity, conversion attribution, and competitor movement to adjust strategy on the fly.", icon: "TrendingUp", color: "from-indigo-500 to-sky-600" }
         ],
         metrics: [
-          { t: "Core Web Vitals Audit" },
-          { t: "Semantic Entity Mapping" },
-          { t: "JavaScript SEO Handoff" },
-          { t: "Internal Link Logic" },
-          { t: "Competitor Velocity Gap" },
-          { t: "Backlink Integrity" }
+          { t: "Core Web Vitals Audit", d: "Sub-second LCP and CLS optimization.", icon: "Flash" },
+          { t: "Semantic Entity Mapping", d: "NLP-driven topical authority building.", icon: "Layers" },
+          { t: "JavaScript Rendering", d: "Ensuring CSR/SSR indexing integrity.", icon: "Code" },
+          { t: "Backlink Integrity", d: "High-DA structural link engineering.", icon: "Shield" }
         ]
       },
       cta: { title: "Stop playing catch up. Command the First Page." }
     },
     details: {
-      hero: { badge: "Technical Specification Protocol", title: "SEO Architecture Audit", description: "Technical manifest of our SEO engine." },
-      sections: {
-         roi: [
-          { title: "Visibility Resilience", desc: "Algorithm-proof content clusters and entity associations.", icon: "Infinite" },
-          { title: "Authority Scoring", desc: "Deep metrics on backlink power and structural dominance.", icon: "TrendingUp" }
-         ]
+      hero: { 
+        badge: "Technical Specification Protocol", 
+        title: "SEO Architecture", 
+        description: "A technical manifest of our visibility infrastructure, engineered to bypass algorithm volatility and secure permanent authority.",
+        subtitle: "SEO Specifications" 
       },
-      cta: { title: "Ready to initialize your Visibility Brief?" }
+      sections: {
+        roi: [
+          { group: "Authority Tier", items: ["Semantic Entity Mapping", "Topical Cluster Logic", "E-E-A-T Framework", "Knowledge Graph Sync"] },
+          { group: "Technical Tier", items: ["Core Web Vitals (CWV)", "JS Rendering Handlers", "JSON-LD Structured Data", "Indexing Priority Logic"] },
+          { group: "Evolution Tier", items: ["Algorithm Flux Tuning", "Competitor Velocity Gap", "Real-time Rank Drift", "Attribution ROI Mapping"] }
+        ],
+        phases: [
+          { step: "SEO_01", stage: "Discovery & Entity Mapping", action: "Identifying core semantic entities and knowledge graph gaps in your current footprint." },
+          { step: "SEO_02", stage: "Technical Baseline Audit", action: "Deploying deep-crawlers to identify indexing bottlenecks and JavaScript execution errors." },
+          { step: "SEO_03", stage: "On-Page Structural Overhaul", action: "Re-engineering site hierarchy, internal link logic, and metadata schemas." },
+          { step: "SEO_04", stage: "Content Cluster Injection", action: "Deploying high-authority, semantically relevant content nodes to build topical power." },
+          { step: "SEO_05", stage: "Off-Page Authority Bridge", action: "Executing white-hat structural backlink sprints focusing on high-DA niche relevance." },
+          { step: "SEO_06", stage: "Algorithm Resilience Sync", action: "Continuous monitoring of update patterns and proactive tuning of the ranking core." }
+        ]
+      },
+      cta: { title: "Initialize Your Visibility Audit." }
     }
   },
   {
@@ -701,12 +759,12 @@ const seedData = [
         description: "We don't build scripts; we engineer synthetic empathy. Our AI agents are designed to resolve queries, qualify leads, and scale your customer experience 24/7 without fatigue.",
       },
       sections: {
-        verticals: [
+        pillars: [
           { title: "Customer Support (L1/L2)", desc: "Automating repetitive queries with 95% accuracy using RAG-based knowledge banks.", icon: "Chatbubbles", color: "from-purple-500 to-indigo-600" },
           { title: "Lead Generation Bot", desc: "Interactive qualifiers that capture user intent and push warm leads directly to your CRM.", icon: "Flash", color: "from-blue-600 to-cyan-500" },
           { title: "Agentic AI Assistants", desc: "Sophisticated agents capable of executing tasks across your software stack via API calls.", icon: "Shield", color: "from-slate-700 to-slate-900" }
         ],
-        integrations: [
+        metrics: [
           { t: "LLM Orchestration", d: "GPT-4o, Claude 3, and Llama 3 native sync.", icon: "Analytics" },
           { t: "Vector Memory", d: "Pinecone / Milvus for long-term RAG recall.", icon: "Layers" },
           { t: "Platform Bridging", d: "WhatsApp, Telegram & Web Messenger.", icon: "Globe" },
@@ -721,11 +779,25 @@ const seedData = [
       cta: { title: "Ready to scale your Intelligence?" }
     },
     details: {
-      hero: { badge: "Technical Specification Protocol", title: "Cognitive Integrity", description: "Technical manifest of our AI conversational engines." },
+      hero: { 
+        badge: "Technical Specification Protocol", 
+        title: "Cognitive Integrity", 
+        description: "Technical manifest of our AI conversational engines.", 
+        subtitle: "Cognitive Specifications" 
+      },
       sections: {
         roi: [
-          { title: "Latency Reduction", desc: "Average response times under 800ms for RAG-based queries.", icon: "Flash", features: ["Semantic Caching", "Parallelized Inference", "Edge Token Streaming"] },
-          { title: "Resolution Accuracy", desc: "98% hallucination-free responses through rigorous prompt engineering.", icon: "Shield", features: ["Truth Discovery Logic", "Source Attributions", "Automated Guardrails"] }
+          { group: "Intelligence Tier", items: ["GPT-4o / Claude 3.5 Sync", "Custom Vector DB", "NLP Sentiment Mapping", "Zero-Shot Learning"] },
+          { group: "Integrity Tier", items: ["AES-256 Encryption", "SOC-2 Ready Hub", "PII Redaction Engine", "Rate Limiting V2"] },
+          { group: "Interconnect Tier", items: ["WhatsApp Webhook API", "Websocket Live-stream", "CRM Bi-directional Sync", "JSON Meta-Payloads"] }
+        ],
+        phases: [
+          { step: "01", stage: "Data Ingestion", action: "Parsing unstructured business data (PDFs, Docs, CRM) into high-dimensional vector embeddings." },
+          { step: "02", stage: "RAG Architecture", action: "Implementing Retrieval-Augmented Generation to ensure AI answers are grounded in your specific data." },
+          { step: "03", stage: "Inference Tuning", action: "Optimizing model temperature, top-p, and system prompts for accurate intent recognition." },
+          { step: "04", stage: "API Orchestration", action: "Connecting the AI core to your backend systems via secure REST/GraphQL hooks." },
+          { step: "05", stage: "Shadow Testing", action: "Running the bot in 'listen-only' mode to benchmark accuracy against human agents." },
+          { step: "06", stage: "Active Deployment", action: "Phased rollout with daily logic pruning and feedback loop integration." }
         ],
         manifest: [
           { label: "Core Model", value: "GPT-4o / Claude 3.5 Sonnet / Llama 3" },
@@ -748,12 +820,12 @@ const seedData = [
         description: "We eliminate the 'human tax' on repetitive tasks. Our automation engines bridge your software stack, creating seamless, hands-free operational flows.",
       },
       sections: {
-        verticals: [
+        pillars: [
           { title: "Data Pipeline Automation", desc: "Synchronizing data between CRMs, Sheets, and internal databases in real-time.", icon: "Sync", color: "from-blue-600 to-indigo-700" },
           { title: "RPA (UI Automation)", desc: "Bot-driven navigation of legacy web apps that lack official API support.", icon: "Briefcase", color: "from-slate-700 to-slate-900" },
           { title: "DevOps Pipelines", desc: "Automated testing, deployment, and infrastructure scaling triggers.", icon: "Flash", color: "from-cyan-500 to-blue-600" }
         ],
-        integrations: [
+        metrics: [
           { t: "Zapier / Make.com", d: "Sophisticated multi-step workflow logic.", icon: "GitNetwork" },
           { t: "Internal Custom Hooks", d: "Proprietary event bridges built for speed.", icon: "Code" },
           { t: "Cloud Triggers", d: "AWS EventBridge & GCP Cloud Functions.", icon: "CloudUpload" },
@@ -768,11 +840,25 @@ const seedData = [
       cta: { title: "Ready to automate your future?" }
     },
     details: {
-      hero: { badge: "Technical Specification Protocol", title: "Efficiency Logic", description: "Technical manifest of our automation engines." },
+      hero: { 
+        badge: "Technical Specification Protocol", 
+        title: "Efficiency Logic", 
+        description: "Technical manifest of our automation engines.", 
+        subtitle: "Efficiency Specifications" 
+      },
       sections: {
         roi: [
-          { title: "Labor Reduction", desc: "Average saving of 40+ hours per week per department.", icon: "Timer", features: ["Hands-free Data Entry", "Automated Reporting", "Instant Notifications"] },
-          { title: "Error Mitigation", desc: "Reducing human data entry errors to practically zero percent.", icon: "Shield", features: ["Validation Logic", "Atomic Transactions", "Failure Recovery"] }
+          { group: "Efficiency Tier", items: ["Data Pipeline Sync", "RPA UI Navigation", "DevOps Auto-triggers", "Condition Logic Gates"] },
+          { group: "Governance Tier", items: ["SOC-2 Compliance", "Error Retry Logic", "Audit Trail Persistence", "Resource Throttling"] },
+          { group: "Interconnect Tier", items: ["Webhooks / MQTT", "REST API Bridging", "SQL/NoSQL Adapters", "Cloud Event Sync"] }
+        ],
+        phases: [
+          { step: "01", stage: "Logic Discovery", action: "Mapping manual workflows to identify deterministic logic patterns and edge cases." },
+          { step: "02", stage: "Adapter Hookup", action: "Authenticating and connecting to the disparate software nodes in your stack." },
+          { step: "03", stage: "Flow Engineering", action: "Building the sequence of triggers, conditioners, and actions in our engine." },
+          { step: "04", stage: "Error Handling", action: "Implementing retry strategies and notification alerts for edge-case failures." },
+          { step: "05", stage: "Shadow Run", action: "Executing parallel workflows to verify output consistency with manual baseline." },
+          { step: "06", stage: "Production Sync", action: "Full cutover to automated engines with real-time operational monitoring." }
         ],
         manifest: [
           { label: "Engine Hub", value: "Node.js / Python / n8n / Zapier" },
@@ -795,21 +881,42 @@ const seedData = [
         description: "We don't just host; we safeguard your digital presence. Our specialized hosting solutions are engineered for zero-downtime, sub-second latency, and horizontal scalability.",
       },
       sections: {
-        verticals: [
+        pillars: [
           { title: "Managed Cloud (AWS/GCP)", desc: "Tailored infrastructure management with automated scaling and redundant failover systems.", icon: "Cloud", color: "from-blue-600 to-indigo-700" },
           { title: "Static Edge Hosting", desc: "Vercel-integrated global edge deployment for near-instant global content delivery.", icon: "Globe", color: "from-slate-700 to-slate-900" },
           { title: "High-Traffic WordPress", desc: "Specialized tuning for high-traffic WP sites with server-level caching and security hardening.", icon: "Shield", color: "from-cyan-500 to-blue-600" }
         ],
-        integrations: [
+        metrics: [
           { t: "Vercel Edge", d: "Leading-edge serverless deployment logic.", icon: "Globe" },
           { t: "AWS S3 / CloudFront", d: "Industrial asset storage and delivery.", icon: "Layers" },
           { t: "Cloudflare Warp", d: "Superior DDoS protection and WAF logic.", icon: "Shield" },
           { t: "GitHub Actions", d: "Seamless CI/CD deployment pipelines.", icon: "Code" }
         ],
-        pricing: [
-          { t: "Standard Cloud", p: "$49/mo", list: ["Managed Updates", "Weekly Backups", "SSL Certification", "Basic Monitoring", "Email Support"], color: "slate", highlight: false },
-          { t: "Performance Pro", p: "$149/mo", list: ["Daily Backups", "Edge CDN Integration", "DDoS Protection", "Priority Monitoring", "24/7 Priority Support"], color: "blue", highlight: true },
-          { t: "Enterprise Dedicated", p: "Custom", list: ["Dedicated VPC", "Custom Scaling Polices", "SLA Performance Bond", "Full Systems Audit", "Direct Admin Access"], color: "indigo", highlight: false }
+        plans: [
+          { 
+            name: "Standard Cloud", 
+            desc: "Managed Updates, Weekly Backups, SSL Certification", 
+            annualPrice: 470, 
+            monthlyPrice: 49, 
+            features: ["Managed Updates", "Weekly Backups", "SSL Certification", "Basic Monitoring", "Email Support"], 
+            popular: false 
+          },
+          { 
+            name: "Performance Pro", 
+            desc: "Daily Backups, Edge CDN Integration, DDoS Protection", 
+            annualPrice: 1430, 
+            monthlyPrice: 149, 
+            features: ["Daily Backups", "Edge CDN Integration", "DDoS Protection", "Priority Monitoring", "24/7 Priority Support"], 
+            popular: true 
+          },
+          { 
+            name: "Enterprise Dedicated", 
+            desc: "Dedicated VPC, Custom Scaling Polices, SLA Performance Bond", 
+            annualPrice: 4800, 
+            monthlyPrice: 500, 
+            features: ["Dedicated VPC", "Custom Scaling Polices", "SLA Performance Bond", "Full Systems Audit", "Direct Admin Access"], 
+            popular: false 
+          }
         ]
       },
       cta: { title: "Ready for stable infrastructure?" }
@@ -817,17 +924,17 @@ const seedData = [
     details: {
       hero: { badge: "Technical Specification Protocol", title: "Infrastructure Integrity", description: "Technical manifest of our managed hosting solutions." },
       sections: {
-        roi: [
-          { title: "Uptime Maintenance", desc: "99.99% operational uptime guaranteed through multi-region redundancy.", icon: "Timer", features: ["Automated Failover", "Global Ping Monitoring", "Redundant Storage"] },
-          { title: "Latency Reduction", desc: "Reducing TTFB to under 100ms globally through edge caching.", icon: "Flash", features: ["Image Optimization", "Static Site Generation", "Global CDN"] }
+        phases: [
+          { step: "INFRA_01", stage: "Node Provisioning", action: "Automated spin-up of containerized environments via Terraform scripts." },
+          { step: "INFRA_02", stage: "Network configuration", action: "Establishing private subnets, load balancers, and assigning elastic IPs." },
+          { step: "INFRA_03", stage: "Database Linking", action: "Deploying highly available database clusters with read replicas." },
+          { step: "INFRA_04", stage: "Security Handshake", action: "Injecting SSL/TLS certificates and configuring WAF rules." },
+          { step: "INFRA_05", stage: "Edge Sync (CDN)", action: "Propagating static assets across edge points of presence (PoPs)." },
+          { step: "INFRA_06", stage: "Live Cutover", action: "Atomic DNS swapping ensuring zero-downtime deployment." }
         ],
-        manifest: [
-          { label: "Cloud Provider", value: "AWS / Google Cloud / Vercel" },
-          { label: "Security Layer", value: "Cloudflare WAF / SSL v3" },
-          { label: "Monitoring", value: "Datadog / New Relic / Grafana" },
-          { label: "Storage Architecture", value: "NVMe SSD / S3 Persistent" },
-          { label: "Network", value: "Global Anycast Edge" },
-          { label: "Backup Protocol", value: "Immutable Hourly Snapshots" }
+        roi: [
+          { group: "Performance", items: ["NVMe Storage", "Anycast Network", "Auto-Scaling Up/Down", "Redis Object Caching"] },
+          { group: "Security", items: ["DDoS Mitigation", "Malware Scanning", "Automated Backups", "End-to-End Encryption"] }
         ]
       },
       cta: { title: "Start Your Infrastructure Audit." }
@@ -842,18 +949,18 @@ const seedData = [
         description: "We don't just fix bugs; we maintain momentum. Our proactive maintenance cycles ensure your software stays secure, fast, and ahead of the competition.",
       },
       sections: {
-        verticals: [
+        pillars: [
           { title: "Security Patching", desc: "Rapid deployment of security updates and dependency hardening to prevent vulnerabilities.", icon: "Shield", color: "from-slate-700 to-slate-900" },
           { title: "Performance Tuning", desc: "Continuous monitoring and optimization of database queries and client-side performance.", icon: "Flash", color: "from-amber-500 to-orange-600" },
-          { title: "Software Modernization", desc: "Incremental updates to keep your tech stack aligned with the latest industry standards.", icon: "Refresh", color: "from-blue-600 to-indigo-700" }
+          { title: "Software Modernization", desc: "Incremental updates to keep your tech stack aligned with the latest industry standards.", icon: "Globe", color: "from-blue-600 to-indigo-700" }
         ],
-        integrations: [
+        metrics: [
           { t: "Sentry / LogRocket", d: "Real-time error tracking and session replay.", icon: "Analytics" },
           { t: "StatusGator", d: "Public-facing uptime status pages.", icon: "Globe" },
           { t: "GitHub Automerge", d: "Continuous dependency update logic.", icon: "Code" },
           { t: "Pingdom", d: "Global synthetic monitoring alerts.", icon: "Shield" }
         ],
-        pricing: [
+        plans: [
           { t: "Core Guard", p: "$299/mo", list: ["Security Updates", "Weekly Backups", "Bug Fixes (4hrs)", "Uptime Monitoring", "Monthly Health Report"], color: "slate", highlight: false },
           { t: "Ops Excellence", p: "$899/mo", list: ["Priority Patching", "Daily Backups", "Performance Tuning", "Bug Fixes (12hrs)", "Dedicated Support Lead"], color: "amber", highlight: true },
           { t: "Enterprise Elite", p: "Custom", list: ["24/7 Direct Access", "Infinite Scaling Support", "Full Security Audits", "Custom Feature Sprints", "SLA Guardrails"], color: "indigo", highlight: false }
@@ -862,19 +969,24 @@ const seedData = [
       cta: { title: "Ready for proactive support?" }
     },
     details: {
-      hero: { badge: "Technical Specification Protocol", title: "Stability Logic", description: "Technical manifest of our maintenance and support protocols." },
+      hero: { 
+        badge: "Technical Specification Protocol", 
+        title: "Stability Logic", 
+        description: "Technical manifest of our maintenance and support protocols.", 
+        subtitle: "Performance Specifications" 
+      },
       sections: {
-        roi: [
-          { title: "Downtime Prevention", desc: "Stop issues before they affect users with predictive monitoring.", icon: "Shield", features: ["Anomaly Detection", "Automated Rollbacks", "Log Correlation"] },
-          { title: "Security Longevity", desc: "Ensuring your software remains compliant and secure year over year.", icon: "LockClosed", features: ["Dependency Audits", "Vulnerability Scanning", "Compliance Map"] }
+        phases: [
+          { step: "SAFE_01", stage: "Heuristic Scan", action: "Deep-level audit of software dependencies and codebase for legacy vulnerabilities." },
+          { step: "SAFE_02", stage: "Patch Deployment", action: "Executing automated patching of identified vulnerabilities and dependency upgrades." },
+          { step: "SAFE_03", stage: "DB Optimization", action: "Pruning overhead and vibration-testing SQL/NoSQL queries for maximum throughput." },
+          { step: "SAFE_04", stage: "Asset Compression", action: "Reprocessing all media assets and minifying JS/CSS for sub-second LCP scores." },
+          { step: "SAFE_05", stage: "Latency check", action: "Pinging global edge nodes to verify worldwide content delivery speeds." },
+          { step: "SAFE_06", stage: "Report Sync", action: "Generating automated stability briefs and pushing them to the client hub." }
         ],
-        manifest: [
-          { label: "Monitoring Stack", value: "Sentry / Datadog / Prometheus" },
-          { label: "Update Cycle", value: "Bi-Weekly Production Sprints" },
-          { label: "Backup Frequency", value: "Hourly / Daily / Monthly" },
-          { label: "Security Protocol", value: "OWASP Top 10 Hardening" },
-          { label: "Ticket SLA", value: "4h / 12h / 24h Response" },
-          { label: "Report Delivery", value: "Automated via Slack/Email" }
+        roi: [
+          { group: "Stability", items: ["Anomaly Detection", "Automated Rollbacks", "Log Correlation", "SSL Auto-Sync"] },
+          { group: "Security", items: ["Dependency Audits", "Vulnerability Scanning", "Compliance Map", "WAF Hardening"] }
         ]
       },
       cta: { title: "Start Your Support Brief." }
@@ -885,46 +997,52 @@ const seedData = [
     landing: {
       hero: {
         badge: "Emerging Talent Protocol",
-        title: "Hire Student Talents",
-        description: "Inject fresh perspective and cutting-edge energy into your projects. Access the top 1% of our mentored graduates, trained in the latest industrial standards.",
+        title: "Hire Vetted Student Talents",
+        description: "Inject fresh perspective and cutting-edge energy into your projects. Access the top 1% of our mentored graduates, trained in industrial standards and managed by senior leads.",
       },
       sections: {
-        verticals: [
-          { title: "Junior Web Devs", desc: "Full-stack capable juniors mentored in Next.js, Node, and modern clean-code principles.", icon: "Code", color: "from-blue-600 to-indigo-700" },
-          { title: "Creative Designers", desc: "Fresh eyes trained in UI/UX psychology and modern \"Industrial Luxury\" design aesthetics.", icon: "Palette", color: "from-rose-500 to-pink-600" },
-          { title: "Social Content Leads", desc: "Natives of the scroll, trained in algorithmic strategy and high-fidelity asset creation.", icon: "Images", color: "from-amber-500 to-orange-600" }
+        pillars: [
+          { title: "Mentored Tech Leads", desc: "Full-stack capable juniors mentored in Next.js, Node, and enterprise-grade architecture.", icon: "School", color: "from-indigo-600 to-blue-700" },
+          { title: "UI/UX Psychology Specialists", desc: "Fresh eyes trained in modern 'Industrial Luxury' design and user behavioral psychology.", icon: "Ribbon", color: "from-blue-600 to-indigo-800" },
+          { title: "Algorithmic Content Leads", desc: "Natives of the scroll, trained in algorithmic growth strategy and high-fidelity asset creation.", icon: "Flash", color: "from-slate-700 to-slate-900" }
         ],
-        integrations: [
-          { t: "Skill Verification", d: "Verified portfolio and code review history.", icon: "Shield" },
-          { t: "Mentorship Bridge", d: "Ongoing support from SYICT senior leads.", icon: "People" },
-          { t: "Rapid Handoff", d: "Pre-onboarded on professional tools.", icon: "Flash" },
-          { t: "Culture Alignment", d: "Trained in professional communication.", icon: "Globe" }
-        ],
-        pricing: [
-          { t: "Project Intern", p: "$Varies", list: ["Limited Term Access", "Specific Task Focus", "Monthly Progress Review", "SYICT Senior Oversite", "Flexible Hours"], color: "slate", highlight: false },
-          { t: "Junior Retainer", p: "$Varies", list: ["Part-time (20hrs/wk)", "Integrated Workflow", "Skill Growth Roadmap", "Weekly Mentor Sync", "Direct Slack Access"], color: "blue", highlight: true },
-          { t: "Direct Placement", p: "Fee-based", list: ["Full-time Recruitment", "Validated Skillset", "Background Vetting", "3-Month Guarantee", "Smooth Handoff Protocol"], color: "indigo", highlight: false }
-        ]
-      },
-      cta: { title: "Ready to hire next-gen talent?" }
-    },
-    details: {
-      hero: { badge: "Technical Specification Protocol", title: "Talent Integrity", description: "Technical manifest of our student mentorship and placement protocol." },
-      sections: {
-        roi: [
-          { title: "Innovation Injection", desc: "Bring modern techniques and fresh enthusiasm to your internal team.", icon: "Sparkles", features: ["Fast Adaptability", "Modern Stack Native", "High Energy"] },
-          { title: "Cost Efficiency", desc: "Acquire high-potential talent at an optimized investment entry point.", icon: "Stats", features: ["Low Overhead", "Mentored Growth", "Proven Performance"] }
-        ],
-        manifest: [
-          { label: "Curation Ratio", value: "Top 5% of Graduates" },
-          { label: "Mentorship Hours", value: "500+ Hours Live Project Training" },
-          { label: "Tech Proficiency", value: "Next.js / Tailwind / Node / Figma" },
-          { label: "Soft Skills", value: "Client-facing Communication" },
-          { label: "Vetting Process", value: "Code Review + Psychology Profile" },
-          { label: "Support Bridge", value: "Direct Line to SYICT Seniors" }
+        metrics: [
+          { t: "98% SKILL MATCH", d: "Proprietary AI-driven vetting logic ensuring elite alignment with your stack.", icon: "Shield" },
+          { t: "24H PLACEMENT", d: "Rapid handoff protocol with pre-onboarded talent ready for impact.", icon: "People" },
+          { t: "100% MENTOR MANAGED", d: "Every graduate is backed by 500+ hours of live senior project training.", icon: "Flash" },
+          { t: "DIRECT BRIDGE", d: "Seamless communication lines to the top 5% of our regional graduates.", icon: "Globe" }
         ]
       },
       cta: { title: "Start Your Talent Brief." }
+    },
+    details: {
+      hero: { 
+        badge: "Technical Specification Protocol", 
+        title: "Talent Integrity", 
+        description: "A rigorous, multi-layered vetting manifest ensuring only the top 1% of graduates bridge to your enterprise projects.",
+        subtitle: "Vetting Specifications"
+      },
+      sections: {
+        phases: [
+          { step: "PHASE_01", stage: "Academic Clearance", action: "Verification of CGPA, specialized course completion, and formal faculty recommendations." },
+          { step: "PHASE_02", stage: "HackerRank Assessment", action: "Solving real-world algorithmic problems under strict time constraints to verify core logic." },
+          { step: "PHASE_03", stage: "Live Sprint Test", action: "Building a functional feature within a 4-hour window using Next.js and Tailwind CSS." },
+          { step: "PHASE_04", stage: "Architecture Interview", action: "Theoretical defense of database schemas, API design, and security protocols." },
+          { step: "PHASE_05", stage: "Soft Skills Audit", action: "Simulated client meetings to ensure professional communication and handoff integrity." },
+          { step: "PHASE_06", stage: "Mentor Sync", action: "Final code review by a SYICT Senior Lead before being cleared for the Bridge." }
+        ],
+        roi: [
+          { 
+            group: "Engineering", 
+            items: ["Next.js 14 Integration", "TypeScript Strict Mode", "Node.js Core Logic", "Prisma/Mongoose Schema"] 
+          },
+          { 
+            group: "Design", 
+            items: ["Figma to Code Accuracy", "Motion Logic (Framer)", "Responsive Precision", "Accessibility Protocols"] 
+          }
+        ]
+      },
+      cta: { title: "Initialize Talent Audit." }
     }
   }
 ];
