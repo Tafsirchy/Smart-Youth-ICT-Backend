@@ -18,7 +18,7 @@ async function connectDB() {
   if (!cached.promise) {
     const opts = {
       bufferCommands: true, // Re-enabled to prevent "Cannot call find() before connection" errors
-      serverSelectionTimeoutMS: 20000, 
+      serverSelectionTimeoutMS: 8000, // Reduced to fit within Vercel's 10s limit
       family: 4,
     };
 
