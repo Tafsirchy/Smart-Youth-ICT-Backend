@@ -17,8 +17,8 @@ async function connectDB() {
 
   if (!cached.promise) {
     const opts = {
-      bufferCommands: false,
-      serverSelectionTimeoutMS: 20000, // Giving Atlas more time in cold starts
+      bufferCommands: true, // Re-enabled to prevent "Cannot call find() before connection" errors
+      serverSelectionTimeoutMS: 20000, 
       family: 4,
     };
 

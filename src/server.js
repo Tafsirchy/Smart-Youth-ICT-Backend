@@ -40,18 +40,16 @@ const supportRoutes      = require('./routes/support.routes');
 const app  = express();
 const PORT = process.env.PORT || 5000;
 
-// ─── Connect Database ─────────────────────────────────────────────
-connectDB();
-
-// ─── Geospatial Migration (Legacy → GeoJSON) ──────────────────────
-if (process.env.RUN_MIGRATIONS === 'true') {
-  const migrateToGeoJSON = require('./utils/geospatial-migration');
-  migrateToGeoJSON();
-}
-
-const { apiLimiter } = require('./middleware/rateLimiter.middleware');
-
 // ─── Global Middleware ────────────────────────────────────────────
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    res.status(503).json({ success: false, message: 'Database connection failed. Please try again.' });
+  }
+});
+
 app.use(apiLimiter); // Apply baseline global rate limiting
 app.use(compression());
 app.use(helmet({
