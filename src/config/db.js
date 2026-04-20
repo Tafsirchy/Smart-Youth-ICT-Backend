@@ -1,16 +1,42 @@
 const mongoose = require('mongoose');
 
-const connectDB = async () => {
-  try {
-    const conn = await mongoose.connect(process.env.MONGO_URI, {
-      serverSelectionTimeoutMS: 10000,
-      family: 4,
-    });
-    console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
-  } catch (err) {
-    console.error('❌ MongoDB connection error:', err.message);
-    console.warn('⚠️  Server running without DB — some routes will fail until MongoDB is connected.');
+/**
+ * Global is used here to maintain a cached connection across hot reloads
+ * in development and serverless function invocations in production.
+ */
+let cached = global.mongoose;
+
+if (!cached) {
+  cached = global.mongoose = { conn: null, promise: null };
+}
+
+async function connectDB() {
+  if (cached.conn) {
+    return cached.conn;
   }
-};
+
+  if (!cached.promise) {
+    const opts = {
+      bufferCommands: false,
+      serverSelectionTimeoutMS: 20000, // Giving Atlas more time in cold starts
+      family: 4,
+    };
+
+    cached.promise = mongoose.connect(process.env.MONGO_URI, opts).then((m) => {
+      console.log('✅ MongoDB Connected (New Connection established)');
+      return m;
+    });
+  }
+
+  try {
+    cached.conn = await cached.promise;
+  } catch (e) {
+    cached.promise = null;
+    console.error('❌ MongoDB connection error:', e.message);
+    // Don't throw here for the root server, but the requests relying on it will fail.
+  }
+
+  return cached.conn;
+}
 
 module.exports = connectDB;
