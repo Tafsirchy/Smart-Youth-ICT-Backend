@@ -11,8 +11,6 @@ process.on('unhandledRejection', (reason, promise) => {
 require('dotenv').config();
 const express    = require('express');
 const cors       = require('cors');
-// Temporarily disabled helmet to rule out Vercel infrastructure conflicts
-// const helmet     = require('helmet'); 
 const morgan     = require('morgan');
 const connectDB  = require('./config/db');
 const compression = require('compression');
@@ -53,8 +51,9 @@ const supportRoutes      = require('./routes/support.routes');
 const app  = express();
 const PORT = process.env.PORT || 5000;
 
+// ─── Middleware ───────────────────────────────────────────────────
 app.use(compression());
-// app.use(helmet()); // Temporarily disabled
+// Removed broken app.use(apiLimiter) - Root Cause of 500 Crash
 
 const allowedOrigins = [
   process.env.FRONTEND_URL,
