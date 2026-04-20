@@ -191,7 +191,8 @@ const forgotPassword = async (req, res, next) => {
       user.resetToken = crypto.createHash("sha256").update(token).digest("hex");
       user.resetExpiry = Date.now() + 3600000;
       await user.save({ validateBeforeSave: false });
-      const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+      const locale = user.language || 'bn';
+      const resetUrl = `${process.env.FRONTEND_URL}/${locale}/reset-password?token=${token}`;
       // Send the password reset email
       try {
         await emailService.sendPasswordReset(user, resetUrl);

@@ -192,6 +192,36 @@ const emailService = {
       subject: `🎙️ Ticket Confirmed: ${typeof seminar === 'string' ? seminar : seminar.title}`,
       html: wrapLayout('Seminar Access Pass', content, 'See you at the session! 🚀')
     });
+  },
+
+  /**
+   * 🔐 Password Reset (Security/Recovery)
+   */
+  sendPasswordReset: async (user, resetUrl) => {
+    const content = `
+      <div style="text-align: center; margin-bottom: 30px;">
+        <span style="font-size: 48px;">🔐</span>
+        <h2 style="color: #1e1b4b; font-size: 22px; margin: 10px 0;">Reset Your Password</h2>
+      </div>
+      <p>Hi <strong>${user.name}</strong>,</p>
+      <p>You're receiving this email because we received a password reset request for your account. If you didn't request this, please ignore this email.</p>
+      
+      <div style="text-align: center; margin: 40px 0;">
+        <a href="${resetUrl}" style="background-color: #db2777; color: #ffffff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 16px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(219, 39, 119, 0.4);">Reset My Password</a>
+      </div>
+
+      <div style="background-color: #fff1f2; border-left: 4px solid #e11d48; padding: 15px 20px; border-radius: 8px; margin: 30px 0;">
+        <p style="color: #9f1239; font-size: 13px; margin: 0;"><strong>Security Note:</strong> This link will expire in 1 hour for your protection. For your security, never share this link with anyone.</p>
+      </div>
+      
+      <p style="font-size: 13px; color: #94a3b8; text-align: center;">If the button above doesn't work, copy and paste the following link into your browser:</p>
+      <p style="font-size: 11px; color: #6366f1; text-align: center; word-break: break-all;">${resetUrl}</p>
+    `;
+    return emailService._send({
+      to: user.email,
+      subject: '🔐 Reset Your SYICT Password',
+      html: wrapLayout('Security Alert', content, 'Password recovery initialized.')
+    });
   }
 };
 

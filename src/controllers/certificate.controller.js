@@ -2,11 +2,24 @@ const crypto = require('crypto');
 const ejs = require('ejs');
 const path = require('path');
 const fs = require('fs');
+let chromium;
 let puppeteer;
-try {
-  puppeteer = require('puppeteer');
-} catch (e) {
-  console.warn('Puppeteer not installed or failed to load');
+
+if (process.env.VERCEL) {
+  // Use Vercel specific puppeteer-core and chromium
+  try {
+    puppeteer = require('puppeteer-core');
+    chromium = require('@sparticuz/chromium');
+  } catch (e) {
+    console.error('Failed to load serverless puppeteer dependencies:', e.message);
+  }
+} else {
+  // Use standard puppeteer for local dev
+  try {
+    puppeteer = require('puppeteer');
+  } catch (e) {
+    console.warn('Puppeteer not installed or failed to load');
+  }
 }
 
 const Certificate = require('../models/Certificate');
@@ -111,7 +124,18 @@ exports.downloadCertificate = async (req, res, next) => {
       </html>
     `;
 
-    const browser = await puppeteer.launch({ headless: 'new' });
+    let browser;
+    if (process.env.VERCEL) {
+      browser = await puppeteer.launch({
+        args: chromium.args,
+        defaultViewport: chromium.defaultViewport,
+        executablePath: await chromium.executablePath(),
+        headless: chromium.headless,
+        ignoreHTTPSErrors: true,
+      });
+    } else {
+      browser = await puppeteer.launch({ headless: 'new' });
+    }
     const page = await browser.newPage();
     await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
     

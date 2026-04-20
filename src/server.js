@@ -31,7 +31,7 @@ const sessionRoutes     = require('./routes/session.routes');
 const assetRoutes       = require('./routes/asset.routes');
 const invoiceRoutes     = require('./routes/invoice.routes');
 const notificationRoutes = require('./routes/notification.routes');
-const instructorRoutes   = require('./routes/instructor.routes');
+
 const superRoutes        = require('./routes/super.routes');
 const cmsRoutes          = require('./routes/cms.routes');
 
@@ -127,8 +127,10 @@ require('./jobs/installmentReminder.job');
 require('./jobs/emailCampaign.job');
 require('./jobs/certificateAward.job');
 
-app.listen(PORT, () => {
-  console.log(`🚀 SYICT Backend running on http://localhost:${PORT}`);
-});
+if (process.env.NODE_ENV !== 'production' || process.env.VERCEL_DEV) {
+  app.listen(PORT, () => {
+    console.log(`🚀 SYICT Backend running on http://localhost:${PORT}`);
+  });
+}
 
 module.exports = app;
