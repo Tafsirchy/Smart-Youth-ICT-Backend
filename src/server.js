@@ -81,7 +81,8 @@ app.use(cors(corsOptions));
 // Handle preflight
 app.options('*', cors(corsOptions));
 
-// ─── Database & Sync Middleware ────────────────────────────────────
+// ─── Database & Sync Middleware (TEMPORARILY DISABLED FOR DIAGNOSIS) ───
+/*
 app.use(async (req, res, next) => {
   try {
     await connectDB();
@@ -91,6 +92,7 @@ app.use(async (req, res, next) => {
     res.status(503).json({ success: false, message: 'Database connection failed. Request timed out.' });
   }
 });
+*/
 
 app.use(morgan('dev'));
 
