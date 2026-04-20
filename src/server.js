@@ -81,8 +81,7 @@ app.use(cors(corsOptions));
 // Handle preflight
 app.options('*', cors(corsOptions));
 
-// ─── Database & Sync Middleware (TEMPORARILY DISABLED FOR DIAGNOSIS) ───
-/*
+// ─── Database & Sync Middleware ────────────────────────────────────
 app.use(async (req, res, next) => {
   try {
     await connectDB();
@@ -92,7 +91,6 @@ app.use(async (req, res, next) => {
     res.status(503).json({ success: false, message: 'Database connection failed. Request timed out.' });
   }
 });
-*/
 
 app.use(morgan('dev'));
 
@@ -142,10 +140,12 @@ app.use('*', (_, res) => res.status(404).json({ message: 'Route not found' }));
 // ─── Error handler ────────────────────────────────────────────────
 app.use(errorMiddleware);
 
-// ─── Start Jobs ──────────────────────────────────────────────────
-require('./jobs/installmentReminder.job');
-require('./jobs/emailCampaign.job');
-require('./jobs/certificateAward.job');
+// ─── Start Jobs (Development & Local Only) ─────────────────────────
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+  require('./jobs/installmentReminder.job');
+  require('./jobs/emailCampaign.job');
+  require('./jobs/certificateAward.job');
+}
 
 if (process.env.NODE_ENV !== 'production' || process.env.VERCEL_DEV) {
   app.listen(PORT, () => {

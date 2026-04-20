@@ -17,8 +17,8 @@ async function connectDB() {
 
   if (!cached.promise) {
     const opts = {
-      bufferCommands: true, // Re-enabled to prevent "Cannot call find() before connection" errors
-      serverSelectionTimeoutMS: 8000, // Reduced to fit within Vercel's 10s limit
+      bufferCommands: true, // Prevents errors while connection is being established
+      serverSelectionTimeoutMS: 5000, // Fail after 5s to stay within Vercel's 10s limit
       family: 4,
     };
 
@@ -34,7 +34,7 @@ async function connectDB() {
   } catch (e) {
     cached.promise = null;
     console.error('❌ MongoDB connection error:', e.message);
-    throw e; // Throw so the caller (middleware) knows it failed
+    throw e; // Throw so the middleware knows it failed
   }
 
   return cached.conn;
