@@ -40,16 +40,6 @@ const supportRoutes      = require('./routes/support.routes');
 const app  = express();
 const PORT = process.env.PORT || 5000;
 
-// ─── Global Middleware ────────────────────────────────────────────
-app.use(async (req, res, next) => {
-  try {
-    await connectDB();
-    next();
-  } catch (err) {
-    res.status(503).json({ success: false, message: 'Database connection failed. Please try again.' });
-  }
-});
-
 app.use(apiLimiter); // Apply baseline global rate limiting
 app.use(compression());
 app.use(helmet({
@@ -90,6 +80,18 @@ const corsOptions = {
 app.use(cors(corsOptions));
 // Handle preflight
 app.options('*', cors(corsOptions));
+
+// ─── Database & Sync Middleware ────────────────────────────────────
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    console.error('[Middleware] Database Error:', err.message);
+    res.status(503).json({ success: false, message: 'Database connection failed. Request timed out.' });
+  }
+});
+
 app.use(morgan('dev'));
 
 // ─── Stripe Webhook Exception (Must be before express.json) ───

@@ -30,10 +30,11 @@ async function connectDB() {
 
   try {
     cached.conn = await cached.promise;
+    if (!cached.conn) throw new Error('Mongoose connection failed');
   } catch (e) {
     cached.promise = null;
     console.error('❌ MongoDB connection error:', e.message);
-    // Don't throw here for the root server, but the requests relying on it will fail.
+    throw e; // Throw so the caller (middleware) knows it failed
   }
 
   return cached.conn;
