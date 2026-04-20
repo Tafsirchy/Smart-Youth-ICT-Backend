@@ -1,12 +1,27 @@
-require('dotenv').config();
+// 🚨 EMERGENCY DIAGNOSTIC START 🚨
+process.on('uncaughtException', (err) => {
+  console.error('🔥 UNCAUGHT EXCEPTION:', err.message);
+  console.error(err.stack);
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('🧊 UNHANDLED REJECTION at:', promise, 'reason:', reason);
+});
+// 🚨 EMERGENCY DIAGNOSTIC END 🚨
 
+require('dotenv').config();
 const express    = require('express');
 const cors       = require('cors');
-const helmet     = require('helmet');
+// Temporarily disabled helmet to rule out Vercel infrastructure conflicts
+// const helmet     = require('helmet'); 
 const morgan     = require('morgan');
 const connectDB  = require('./config/db');
 const compression = require('compression');
 const errorMiddleware = require('./middleware/error.middleware');
+
+// Diagnostic: Log environment status (Masked)
+const maskedUri = process.env.MONGO_URI ? `${process.env.MONGO_URI.substring(0, 15)}...` : 'MISSING';
+console.log(`[Diagnostic] MONGO_URI status: ${maskedUri}`);
+console.log(`[Diagnostic] NODE_ENV: ${process.env.NODE_ENV}`);
 
 // ─── Route imports ────────────────────────────────────────────────
 const authRoutes        = require('./routes/auth.routes');
@@ -31,32 +46,16 @@ const sessionRoutes     = require('./routes/session.routes');
 const assetRoutes       = require('./routes/asset.routes');
 const invoiceRoutes     = require('./routes/invoice.routes');
 const notificationRoutes = require('./routes/notification.routes');
-
 const superRoutes        = require('./routes/super.routes');
 const cmsRoutes          = require('./routes/cms.routes');
-
 const supportRoutes      = require('./routes/support.routes');
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(apiLimiter); // Apply baseline global rate limiting
 app.use(compression());
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://apis.google.com"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      imgSrc: ["'self'", "data:", "https://*"],
-      connectSrc: ["'self'", "https://*"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      objectSrc: ["'none'"],
-      mediaSrc: ["'self'"],
-      frameSrc: ["'self'", "https://accounts.google.com"],
-    },
-  },
-}));
+// app.use(helmet()); // Temporarily disabled
+
 const allowedOrigins = [
   process.env.FRONTEND_URL,
   'https://syict-frontend.vercel.app',
@@ -78,7 +77,6 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-// Handle preflight
 app.options('*', cors(corsOptions));
 
 // ─── Database & Sync Middleware ────────────────────────────────────
@@ -93,12 +91,7 @@ app.use(async (req, res, next) => {
 });
 
 app.use(morgan('dev'));
-
-// ─── Stripe Webhook Exception (Must be before express.json) ───
-// Stripe requires the raw body to construct the event and verify signatures.
 app.use('/api/payments/webhook/stripe', express.raw({ type: 'application/json' }));
-
-// 🛡️ Security Hardening: Enforce strict payload limits to prevent memory exhaustion (DoS)
 app.use(express.json({ limit: '20kb' })); 
 app.use(express.urlencoded({ extended: true, limit: '20kb' }));
 
@@ -130,21 +123,19 @@ app.use(`${API}/super`,         superRoutes);
 app.use(`${API}/cms`,           cmsRoutes);
 app.use(`${API}/support`,       supportRoutes);
 
-
-// ─── Health check ────────────────────────────────────────────────
 app.get('/health', (_, res) => res.json({ status: 'ok', ts: new Date() }));
-
-// ─── 404 handler ─────────────────────────────────────────────────
 app.use('*', (_, res) => res.status(404).json({ message: 'Route not found' }));
-
-// ─── Error handler ────────────────────────────────────────────────
 app.use(errorMiddleware);
 
 // ─── Start Jobs (Development & Local Only) ─────────────────────────
 if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
-  require('./jobs/installmentReminder.job');
-  require('./jobs/emailCampaign.job');
-  require('./jobs/certificateAward.job');
+  try {
+    require('./jobs/installmentReminder.job');
+    require('./jobs/emailCampaign.job');
+    require('./jobs/certificateAward.job');
+  } catch (err) {
+    console.error('Job loading error:', err.message);
+  }
 }
 
 if (process.env.NODE_ENV !== 'production' || process.env.VERCEL_DEV) {
