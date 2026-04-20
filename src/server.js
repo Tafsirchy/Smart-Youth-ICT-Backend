@@ -69,11 +69,29 @@ app.use(helmet({
     },
   },
 }));
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'https://syict-frontend.vercel.app',
+  'https://smart-youth-ict-frontend.vercel.app',
+  'http://localhost:3000'
+].filter(Boolean);
+
 const corsOptions = {
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.indexOf(origin) !== -1 || origin.endsWith('.vercel.app')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
 };
+
 app.use(cors(corsOptions));
+// Handle preflight
+app.options('*', cors(corsOptions));
 app.use(morgan('dev'));
 
 // ─── Stripe Webhook Exception (Must be before express.json) ───
