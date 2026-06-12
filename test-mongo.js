@@ -1,3 +1,5 @@
+const dns = require('dns');
+dns.setServers(['8.8.8.8', '8.8.4.4']);
 const path = require("path");
 const { MongoClient, ServerApiVersion } = require("mongodb");
 
