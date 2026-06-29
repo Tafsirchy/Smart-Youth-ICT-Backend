@@ -66,8 +66,17 @@ const register = async (req, res, next) => {
       branchId: assignedBranch,
     });
 
-    // 📧 Fire-and-forget Welcome Email
-    emailService.sendWelcome(user).catch(err => console.error('[Registration Email Failed]', err.message));
+    // Generate Verification Token
+    const verifyToken = crypto.randomBytes(32).toString("hex");
+    user.verificationToken = crypto.createHash("sha256").update(verifyToken).digest("hex");
+    user.verificationExpiry = Date.now() + 24 * 3600000; // 24 hours
+    await user.save({ validateBeforeSave: false });
+
+    // Send Verification Email
+    const locale = req.headers['accept-language']?.includes('bn') ? 'bn' : 'en';
+    const verifyUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/${locale}/verify-email?token=${verifyToken}`;
+    
+    emailService.sendVerificationEmail(user, verifyUrl).catch(err => console.error('[Verification Email Failed]', err.message));
 
     return sendAuthResponse(res, 201, user);
   } catch (err) {
@@ -175,6 +184,64 @@ const googleLogin = async (req, res, next) => {
   }
 };
 
+// GET /api/auth/verify-email
+const verifyEmail = async (req, res, next) => {
+  try {
+    const { token } = req.query;
+    if (!token) {
+      return res.status(400).json({ message: "Verification token is required" });
+    }
+
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+    const user = await User.findOne({
+      verificationToken: hashedToken,
+      verificationExpiry: { $gt: Date.now() },
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: "Invalid or expired verification link." });
+    }
+
+    user.isVerified = true;
+    user.verificationToken = undefined;
+    user.verificationExpiry = undefined;
+    await user.save();
+
+    // Fire-and-forget Welcome Email now that they are verified
+    emailService.sendWelcome(user).catch(err => console.error('[Welcome Email Failed]', err.message));
+
+    res.json({ success: true, message: "Email successfully verified!" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /api/auth/resend-verification
+const resendVerification = async (req, res, next) => {
+  try {
+    const email = normalizeEmail(req.body.email);
+    if (!email) return res.status(400).json({ message: "Email is required" });
+
+    const user = await User.findOne({ email });
+    if (user && !user.isVerified && user.hasProvider("credentials")) {
+      const verifyToken = crypto.randomBytes(32).toString("hex");
+      user.verificationToken = crypto.createHash("sha256").update(verifyToken).digest("hex");
+      user.verificationExpiry = Date.now() + 24 * 3600000;
+      await user.save({ validateBeforeSave: false });
+
+      const locale = req.headers['accept-language']?.includes('bn') ? 'bn' : 'en';
+      const verifyUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/${locale}/verify-email?token=${verifyToken}`;
+      
+      emailService.sendVerificationEmail(user, verifyUrl).catch(err => console.error('[Verification Email Failed]', err.message));
+    }
+    
+    // Always return success to prevent enumeration
+    res.json({ success: true, message: "If your account exists and is unverified, a verification link has been sent." });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // GET /api/auth/me
 const getMe = async (req, res) => {
   res.json({ success: true, user: req.user, data: req.user });
@@ -193,12 +260,13 @@ const forgotPassword = async (req, res, next) => {
       await user.save({ validateBeforeSave: false });
       const locale = user.language || 'bn';
       const resetUrl = `${process.env.FRONTEND_URL}/${locale}/reset-password?token=${token}`;
-      // Send the password reset email
-      try {
-        await emailService.sendPasswordReset(user, resetUrl);
-      } catch (mailErr) {
-        console.error("Reset email failed:", mailErr.message);
-      }
+      
+      // Fire-and-forget the password reset email on the next tick so it doesn't block the frontend UI
+      setTimeout(() => {
+        emailService.sendPasswordReset(user, resetUrl).catch(mailErr => {
+          console.error("Reset email failed:", mailErr.message);
+        });
+      }, 0);
     }
     res.json({
       success: true,
@@ -236,10 +304,16 @@ const resetPassword = async (req, res, next) => {
     user.password = password; // Will be hashed by pre-save hook
     user.resetToken = undefined;
     user.resetExpiry = undefined;
-    user.isVerified = true;
+    user.isVerified = true; // also verify them if they reset password
     user.addProvider("credentials");
     user.tokenVersion = (user.tokenVersion || 0) + 1;
     await user.save();
+
+    // Send Security Alert on the next tick
+    setTimeout(() => {
+      emailService.sendPasswordChangedAlert(user).catch(err => console.error('[Password Changed Alert Failed]', err.message));
+    }, 0);
+
     res.json({
       success: true,
       message: "Password has been reset. Please log in.",
@@ -284,6 +358,9 @@ const updatePassword = async (req, res, next) => {
     user.tokenVersion = (user.tokenVersion || 0) + 1;
     await user.save();
 
+    // Send Security Alert
+    emailService.sendPasswordChangedAlert(user).catch(err => console.error('[Password Changed Alert Failed]', err.message));
+
     res.json({ success: true, message: "Password updated successfully" });
   } catch (err) {
     next(err);
@@ -295,6 +372,8 @@ module.exports = {
   login,
   googleLogin,
   getMe,
+  verifyEmail,
+  resendVerification,
   forgotPassword,
   resetPassword,
   updateProfile,

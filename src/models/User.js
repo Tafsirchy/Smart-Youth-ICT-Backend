@@ -51,6 +51,10 @@ const UserSchema = new mongoose.Schema(
     // Password reset
     resetToken: String,
     resetExpiry: Date,
+
+    // Email verification
+    verificationToken: String,
+    verificationExpiry: Date,
   },
   { timestamps: true },
 );

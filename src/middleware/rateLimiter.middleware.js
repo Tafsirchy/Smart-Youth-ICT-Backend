@@ -13,5 +13,12 @@ const apiLimiter = rateLimit({
   max:      100,
   message:  { message: 'Rate limit exceeded. Please slow down.' },
 });
+const emailLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max:      3,
+  message:  { message: 'You have reached the maximum number of email requests. Please try again in an hour.' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+});
 
-module.exports = { authLimiter, apiLimiter };
+module.exports = { authLimiter, apiLimiter, emailLimiter };

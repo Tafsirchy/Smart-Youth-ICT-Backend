@@ -1,8 +1,12 @@
+const { Resend } = require('resend');
 const transporter = require('../config/mail');
 const { wrapLayout } = require('../utils/emailLayout');
 
-const MAIL_FROM = process.env.MAIL_FROM || 'smartyouthictbd@gmail.com';
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+// Initialize with a dummy key if not present, so the server doesn't crash on startup
+const resend = new Resend(process.env.RESEND_API_KEY || 're_dummykey123456789');
+
+const EMAIL_FROM = process.env.EMAIL_FROM || process.env.MAIL_FROM || 'noreply@smartyouthict.com';
+const FRONTEND_URL = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
 const emailService = {
   /**
@@ -10,18 +14,40 @@ const emailService = {
    */
   _send: async (options) => {
     try {
-      if (!process.env.MAIL_PASS) {
-        console.log('[Email Simulation]', options.to, options.subject);
-        return { success: true, simulated: true };
+      const textFallback = options.text || options.html.replace(/<[^>]+>/g, '');
+      const fromEmail = EMAIL_FROM.includes('<') ? EMAIL_FROM : `"Smart Youth ICT" <${EMAIL_FROM}>`;
+
+      // If the API key is missing or is just our placeholder, fall back to Nodemailer SMTP
+      if (!process.env.RESEND_API_KEY || process.env.RESEND_API_KEY.includes('your_api_key')) {
+        console.log('[Email Fallback] Using SMTP because Resend API key is missing for:', options.to);
+        
+        // Use SMTP
+        const info = await transporter.sendMail({
+          from: fromEmail,
+          text: textFallback,
+          ...options,
+        });
+        return { success: true, messageId: info.messageId };
       }
-      const info = await transporter.sendMail({
-        from: `"Smart Youth ICT" <${MAIL_FROM}>`,
-        ...options,
+      
+      // Otherwise use Resend SDK
+      const { data, error } = await resend.emails.send({
+        from: fromEmail,
+        to: Array.isArray(options.to) ? options.to : [options.to],
+        subject: options.subject,
+        html: options.html,
+        text: textFallback,
       });
-      return { success: true, messageId: info.messageId };
+
+      if (error) {
+        console.error('[Resend Error]', error);
+        throw new Error(error.message);
+      }
+
+      return { success: true, messageId: data.id };
     } catch (err) {
-      console.error('[Email SMTP Error]', err.message);
-      return { success: false, error: err.message };
+      console.error('[Email Send Error]', err.message);
+      throw new Error(`Email sending failed: ${err.message}`);
     }
   },
 
@@ -220,7 +246,64 @@ const emailService = {
     return emailService._send({
       to: user.email,
       subject: '🔐 Reset Your SYICT Password',
+      text: `Reset your password by visiting this link: ${resetUrl}`,
       html: wrapLayout('Security Alert', content, 'Password recovery initialized.')
+    });
+  },
+
+  /**
+   * 📧 Email Verification (Signup flow)
+   */
+  sendVerificationEmail: async (user, verifyUrl) => {
+    const content = `
+      <div style="text-align: center; margin-bottom: 30px;">
+        <span style="font-size: 48px;">✉️</span>
+        <h2 style="color: #1e1b4b; font-size: 22px; margin: 10px 0;">Verify Your Email Address</h2>
+      </div>
+      <p>Hi <strong>${user.name}</strong>,</p>
+      <p>Welcome to SYICT! Please verify your email address to activate your account and start your journey with us.</p>
+      
+      <div style="text-align: center; margin: 40px 0;">
+        <a href="${verifyUrl}" style="background-color: #2563eb; color: #ffffff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 16px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.4);">Verify Email</a>
+      </div>
+
+      <div style="background-color: #f1f5f9; border-left: 4px solid #64748b; padding: 15px 20px; border-radius: 8px; margin: 30px 0;">
+        <p style="color: #475569; font-size: 13px; margin: 0;">This link will expire in 24 hours. If you did not create an account, no further action is required.</p>
+      </div>
+      
+      <p style="font-size: 13px; color: #94a3b8; text-align: center;">Or copy and paste this link:</p>
+      <p style="font-size: 11px; color: #6366f1; text-align: center; word-break: break-all;">${verifyUrl}</p>
+    `;
+    return emailService._send({
+      to: user.email,
+      subject: 'Verify your email address – SYICT',
+      text: `Welcome to SYICT, ${user.name}! Please verify your email by visiting this link: ${verifyUrl}`,
+      html: wrapLayout('Account Verification', content, 'Welcome to the future of learning.')
+    });
+  },
+
+  /**
+   * 🛡️ Security Alert (Password Changed)
+   */
+  sendPasswordChangedAlert: async (user) => {
+    const content = `
+      <div style="text-align: center; margin-bottom: 30px;">
+        <span style="font-size: 48px;">🛡️</span>
+        <h2 style="color: #1e1b4b; font-size: 22px; margin: 10px 0;">Password Changed Successfully</h2>
+      </div>
+      <p>Hi <strong>${user.name}</strong>,</p>
+      <p>This is a security notification that the password for your SYICT account was recently changed.</p>
+      <p>If you made this change, you don't need to do anything else.</p>
+      
+      <div style="background-color: #fff1f2; border-left: 4px solid #e11d48; padding: 15px 20px; border-radius: 8px; margin: 30px 0;">
+        <p style="color: #9f1239; font-size: 13px; margin: 0;"><strong>Didn't make this change?</strong> Please reset your password immediately or contact our support team to secure your account.</p>
+      </div>
+    `;
+    return emailService._send({
+      to: user.email,
+      subject: 'Security Alert: Password Changed – SYICT',
+      text: `Your password was recently changed. If you didn't do this, please contact support immediately.`,
+      html: wrapLayout('Security Alert', content, 'Your account security is our priority.')
     });
   }
 };
