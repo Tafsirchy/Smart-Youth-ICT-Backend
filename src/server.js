@@ -9,10 +9,10 @@ process.on('unhandledRejection', (reason, promise) => {
 // 🚨 EMERGENCY DIAGNOSTIC END 🚨
 
 require('dotenv').config();
-const express    = require('express');
-const cors       = require('cors');
-const morgan     = require('morgan');
-const connectDB  = require('./config/db');
+const express = require('express');
+const cors = require('cors');
+const morgan = require('morgan');
+const connectDB = require('./config/db');
 const compression = require('compression');
 const errorMiddleware = require('./middleware/error.middleware');
 
@@ -22,33 +22,33 @@ console.log(`[Diagnostic] MONGO_URI status: ${maskedUri}`);
 console.log(`[Diagnostic] NODE_ENV: ${process.env.NODE_ENV}`);
 
 // ─── Route imports ────────────────────────────────────────────────
-const authRoutes        = require('./routes/auth.routes');
-const userRoutes        = require('./routes/user.routes');
-const courseRoutes      = require('./routes/course.routes');
-const lessonRoutes      = require('./routes/lesson.routes');
-const enrollmentRoutes  = require('./routes/enrollment.routes');
-const progressRoutes    = require('./routes/progress.routes');
-const assignmentRoutes  = require('./routes/assignment.routes');
-const quizRoutes        = require('./routes/quiz.routes');
+const authRoutes = require('./routes/auth.routes');
+const userRoutes = require('./routes/user.routes');
+const courseRoutes = require('./routes/course.routes');
+const lessonRoutes = require('./routes/lesson.routes');
+const enrollmentRoutes = require('./routes/enrollment.routes');
+const progressRoutes = require('./routes/progress.routes');
+const assignmentRoutes = require('./routes/assignment.routes');
+const quizRoutes = require('./routes/quiz.routes');
 const certificateRoutes = require('./routes/certificate.routes');
-const paymentRoutes     = require('./routes/payment.routes');
-const blogRoutes        = require('./routes/blog.routes');
+const paymentRoutes = require('./routes/payment.routes');
+const blogRoutes = require('./routes/blog.routes');
 const testimonialRoutes = require('./routes/testimonial.routes');
-const projectRoutes     = require('./routes/project.routes');
-const portfolioRoutes   = require('./routes/portfolio.routes');
-const affiliateRoutes   = require('./routes/affiliate.routes');
-const crmRoutes         = require('./routes/crm.routes');
-const seminarRoutes     = require('./routes/seminar.routes');
-const branchRoutes      = require('./routes/branch.routes');
-const sessionRoutes     = require('./routes/session.routes');
-const assetRoutes       = require('./routes/asset.routes');
-const invoiceRoutes     = require('./routes/invoice.routes');
+const projectRoutes = require('./routes/project.routes');
+const portfolioRoutes = require('./routes/portfolio.routes');
+const affiliateRoutes = require('./routes/affiliate.routes');
+const crmRoutes = require('./routes/crm.routes');
+const seminarRoutes = require('./routes/seminar.routes');
+const branchRoutes = require('./routes/branch.routes');
+const sessionRoutes = require('./routes/session.routes');
+const assetRoutes = require('./routes/asset.routes');
+const invoiceRoutes = require('./routes/invoice.routes');
 const notificationRoutes = require('./routes/notification.routes');
-const superRoutes        = require('./routes/super.routes');
-const cmsRoutes          = require('./routes/cms.routes');
-const supportRoutes      = require('./routes/support.routes');
+const superRoutes = require('./routes/super.routes');
+const cmsRoutes = require('./routes/cms.routes');
+const supportRoutes = require('./routes/support.routes');
 
-const app  = express();
+const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ─── Middleware ───────────────────────────────────────────────────
@@ -59,7 +59,8 @@ const allowedOrigins = [
   process.env.FRONTEND_URL,
   'https://syict-frontend.vercel.app',
   'https://smart-youth-ict-frontend.vercel.app',
-  'http://localhost:3000'
+  'http://localhost:3000',
+  'https://www.smartyouthict.com'
 ].filter(Boolean);
 
 const corsOptions = {
@@ -91,36 +92,36 @@ app.use(async (req, res, next) => {
 
 app.use(morgan('dev'));
 app.use('/api/payments/webhook/stripe', express.raw({ type: 'application/json' }));
-app.use(express.json({ limit: '20kb' })); 
+app.use(express.json({ limit: '20kb' }));
 app.use(express.urlencoded({ extended: true, limit: '20kb' }));
 
 // ─── API Routes ───────────────────────────────────────────────────
 const API = '/api';
-app.use(`${API}/auth`,         authRoutes);
-app.use(`${API}/users`,        userRoutes);
-app.use(`${API}/courses`,      courseRoutes);
-app.use(`${API}/lessons`,      lessonRoutes);
-app.use(`${API}/enrollments`,  enrollmentRoutes);
-app.use(`${API}/progress`,     progressRoutes);
-app.use(`${API}/assignments`,  assignmentRoutes);
-app.use(`${API}/quizzes`,      quizRoutes);
+app.use(`${API}/auth`, authRoutes);
+app.use(`${API}/users`, userRoutes);
+app.use(`${API}/courses`, courseRoutes);
+app.use(`${API}/lessons`, lessonRoutes);
+app.use(`${API}/enrollments`, enrollmentRoutes);
+app.use(`${API}/progress`, progressRoutes);
+app.use(`${API}/assignments`, assignmentRoutes);
+app.use(`${API}/quizzes`, quizRoutes);
 app.use(`${API}/certificates`, certificateRoutes);
-app.use(`${API}/payments`,     paymentRoutes);
-app.use(`${API}/blog`,         blogRoutes);
+app.use(`${API}/payments`, paymentRoutes);
+app.use(`${API}/blog`, blogRoutes);
 app.use(`${API}/testimonials`, testimonialRoutes);
-app.use(`${API}/projects`,     projectRoutes);
-app.use(`${API}/portfolio`,    portfolioRoutes);
-app.use(`${API}/affiliate`,    affiliateRoutes);
-app.use(`${API}/crm`,          crmRoutes);
-app.use(`${API}/seminar`,      seminarRoutes);
-app.use(`${API}/branches`,     branchRoutes);
-app.use(`${API}/sessions`,     sessionRoutes);
-app.use(`${API}/assets`,       assetRoutes);
-app.use(`${API}/invoices`,     invoiceRoutes);
+app.use(`${API}/projects`, projectRoutes);
+app.use(`${API}/portfolio`, portfolioRoutes);
+app.use(`${API}/affiliate`, affiliateRoutes);
+app.use(`${API}/crm`, crmRoutes);
+app.use(`${API}/seminar`, seminarRoutes);
+app.use(`${API}/branches`, branchRoutes);
+app.use(`${API}/sessions`, sessionRoutes);
+app.use(`${API}/assets`, assetRoutes);
+app.use(`${API}/invoices`, invoiceRoutes);
 app.use(`${API}/notifications`, notificationRoutes);
-app.use(`${API}/super`,         superRoutes);
-app.use(`${API}/cms`,           cmsRoutes);
-app.use(`${API}/support`,       supportRoutes);
+app.use(`${API}/super`, superRoutes);
+app.use(`${API}/cms`, cmsRoutes);
+app.use(`${API}/support`, supportRoutes);
 
 app.get('/health', (_, res) => res.json({ status: 'ok', ts: new Date() }));
 app.use('*', (_, res) => res.status(404).json({ message: 'Route not found' }));
