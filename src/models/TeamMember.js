@@ -13,6 +13,8 @@ const TeamMemberSchema = new mongoose.Schema(
     },
     image: { type: String, default: "" },
     bio: { type: String, trim: true },
+    badge: { type: String, trim: true },
+    experience: { type: String, trim: true },
     expertise: [{ type: String, trim: true }],
     branchId: {
       type: mongoose.Schema.Types.ObjectId,

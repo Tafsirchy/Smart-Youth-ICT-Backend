@@ -137,9 +137,9 @@ exports.getMentors = async (req, res, next) => {
 
 exports.createMentor = async (req, res, next) => {
   try {
-    const { name, email, password, expertise, bio, featuredBio, avatar } = req.body;
+    const { name, email, password, expertise, bio, featuredBio, avatar, badge, experience, socials } = req.body;
     const user = await User.create({
-      name, email, password, expertise, bio, featuredBio, avatar,
+      name, email, password, expertise, bio, featuredBio, avatar, badge, experience, socials,
       role: "instructor",
       isVerified: true
     });

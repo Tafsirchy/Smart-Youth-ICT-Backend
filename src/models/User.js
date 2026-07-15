@@ -37,6 +37,13 @@ const UserSchema = new mongoose.Schema(
     avatar: { type: String, default: "" },
     expertise: [String],
     bio: { type: String, default: "", trim: true, maxlength: 500 },
+    badge: { type: String, trim: true },
+    experience: { type: String, trim: true },
+    socials: {
+      linkedin: { type: String, default: "" },
+      twitter: { type: String, default: "" },
+      website: { type: String, default: "" },
+    },
     isVerified: { type: Boolean, default: false },
     isFeaturedMentor: { type: Boolean, default: false, index: true },
     featuredBio: { type: String, trim: true },
