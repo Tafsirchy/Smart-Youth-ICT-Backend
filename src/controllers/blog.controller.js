@@ -41,6 +41,9 @@ const getAllPosts = async (req, res, next) => {
       const escapedQ = String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       filter.title = { $regex: escapedQ, $options: 'i' };
     }
+    if (req.query.isFeatured === 'true') {
+      filter.isFeatured = true;
+    }
 
     const total = await BlogPost.countDocuments(filter);
     const posts  = await BlogPost.find(filter)
@@ -93,7 +96,7 @@ const getPostBySlug = async (req, res, next) => {
  */
 const createPost = async (req, res, next) => {
   try {
-    const { title, excerpt, content, thumbnail, tags, isPublished } = req.body;
+    const { title, excerpt, content, thumbnail, tags, isPublished, isFeatured } = req.body;
     const slug = await generateUniqueSlug(title);
 
     // Sanitize content to prevent XSS
@@ -113,6 +116,7 @@ const createPost = async (req, res, next) => {
       thumbnail,
       tags: tags || [],
       isPublished: isPublished || false,
+      isFeatured: isFeatured || false,
       author: req.user._id,
     });
 
@@ -132,7 +136,7 @@ const updatePost = async (req, res, next) => {
     const post = await BlogPost.findById(req.params.id);
     if (!post) return res.status(404).json({ success: false, message: 'Post not found' });
 
-    const { title, excerpt, content, thumbnail, tags, isPublished } = req.body;
+    const { title, excerpt, content, thumbnail, tags, isPublished, isFeatured } = req.body;
 
     // Authorization check (IDOR protection)
     if (req.user.role === 'instructor' && post.author.toString() !== req.user._id.toString()) {
@@ -159,6 +163,7 @@ const updatePost = async (req, res, next) => {
     if (thumbnail !== undefined) post.thumbnail = thumbnail;
     if (tags !== undefined) post.tags = tags;
     if (isPublished !== undefined) post.isPublished = isPublished;
+    if (isFeatured !== undefined) post.isFeatured = isFeatured;
 
     await post.save();
     res.json({ success: true, data: post });

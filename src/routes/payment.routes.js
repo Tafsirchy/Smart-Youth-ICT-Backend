@@ -19,13 +19,13 @@ router.post('/checkout', protect, initializeCheckout);
 router.get('/', protect, authorize('super_admin', 'branch_admin'), require('../controllers/payment.controller').getPayments);
 
 // ─────────────────────────────────────────────────────────
-// Manual Bank Transfers
+// Manual Payments (Bank, bKash, Nagad, Rocket)
 // ─────────────────────────────────────────────────────────
-router.post('/bank/submit', protect, async (req, res, next) => {
+router.post('/manual/submit', protect, async (req, res, next) => {
   try {
-    const { courseId, amount, slipUrl } = req.body;
-    if (!courseId || !amount) {
-      return res.status(400).json({ message: 'Course ID and amount are required' });
+    const { courseId, amount, method, transactionId, senderNumber, slipUrl } = req.body;
+    if (!courseId || !amount || !method) {
+      return res.status(400).json({ message: 'Course ID, amount, and payment method are required' });
     }
 
     // Check for existing pending/completed payments for this course
@@ -42,8 +42,10 @@ router.post('/bank/submit', protect, async (req, res, next) => {
     const payment = await Payment.create({
       user: req.user._id, 
       course: courseId,
-      method: 'bank', 
+      method: method || 'bank', 
       amount: Number(amount),
+      transactionId,
+      senderNumber,
       slip: slipUrl, 
       status: 'pending',
     });
