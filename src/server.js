@@ -60,6 +60,7 @@ const allowedOrigins = [
   'https://syict-frontend.vercel.app',
   'https://smart-youth-ict-frontend.vercel.app',
   'http://localhost:3000',
+  'http://localhost:3001',
   'https://www.smartyouthict.com'
 ].filter(Boolean);
 
