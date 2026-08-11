@@ -1,6 +1,6 @@
 const express = require('express');
 const router  = express.Router();
-const { protect }    = require('../middleware/auth.middleware');
+const { protect, optionalProtect } = require('../middleware/auth.middleware');
 const { authorize }  = require('../middleware/role.middleware');
 const upload         = require('../middleware/upload.middleware');
 const {
@@ -10,11 +10,12 @@ const {
   createCourse,
   enrollCourse,
   updateCourse,
-  deleteCourse
+  deleteCourse,
+  uploadCourseImage
 } = require('../controllers/course.controller');
 
 // GET  /api/courses            — public
-router.get('/', getCourses);
+router.get('/', optionalProtect, getCourses);
 
 // GET  /api/courses/enrolled   — student
 router.get('/enrolled', protect, getEnrolledCourses);
@@ -24,6 +25,9 @@ router.get('/:slug', getCourseBySlug);
 
 // POST /api/courses/:id/enroll — student
 router.post('/:id/enroll', protect, enrollCourse);
+
+// POST /api/courses/upload-image
+router.post('/upload-image', protect, upload.single('image'), uploadCourseImage);
 
 const courseManagers = ['super_admin', 'super_management', 'admin', 'branch_admin', 'branch_management', 'instructor'];
 
