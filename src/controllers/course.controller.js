@@ -53,10 +53,12 @@ const getCourses = async (req, res, next) => {
     if (isPopular !== undefined) filter.isPopular = isPopular === "true";
 
     // Create cache key based on query params
-    const cacheKey = `courses_${JSON.stringify(req.query)}`;
-    const cachedData = courseListCache.get(cacheKey);
-    if (cachedData) {
-      return res.json(cachedData);
+    const cacheKey = `courses_public_${JSON.stringify(req.query)}`;
+    if (!isStaff) {
+      const cachedData = courseListCache.get(cacheKey);
+      if (cachedData) {
+        return res.json(cachedData);
+      }
     }
 
     const coursesPromise = Course.find(filter)
@@ -81,7 +83,9 @@ const getCourses = async (req, res, next) => {
     };
 
     // Store in cache
-    courseListCache.set(cacheKey, result);
+    if (!isStaff) {
+      courseListCache.set(cacheKey, result);
+    }
 
     res.json(result);
   } catch (err) {
@@ -197,12 +201,12 @@ const createCourse = async (req, res, next) => {
     };
 
     courseData.title = parseField(courseData.title);
-    
+
     // 🛡️ Security Fix: Sanitize rich-text content to prevent Stored XSS
     const description = parseField(req.body.description);
     if (description) {
-      courseData.description = typeof description === 'string' 
-        ? sanitizeHtml(description, SANITIZE_OPTIONS) 
+      courseData.description = typeof description === 'string'
+        ? sanitizeHtml(description, SANITIZE_OPTIONS)
         : description; // Handle object if it's localized
     }
 
@@ -231,13 +235,14 @@ const createCourse = async (req, res, next) => {
       const str = JSON.stringify(obj);
       return JSON.parse(sanitizeHtml(str, SANITIZE_OPTIONS));
     };
-    
+
     // For simplicity in this audit, we sanitize the primary descriptive fields
     if (courseData.curriculum) courseData.curriculum = sanitizeNested(courseData.curriculum);
     if (courseData.outcomes) courseData.outcomes = sanitizeNested(courseData.outcomes);
 
     // Create the course
     const course = await Course.create(courseData);
+    courseListCache.flushAll(); // Clear cache on change
     res.status(201).json({ success: true, data: course });
   } catch (err) {
     next(err);
@@ -343,7 +348,7 @@ const updateCourse = async (req, res, next) => {
       "outcomes", "targetAudience", "features", "faqs", "projects",
       "installmentPlan", "certification"
     ];
-    
+
     const courseData = {
       thumbnail: thumbnailUrl || req.body.thumbnail,
     };
@@ -399,6 +404,7 @@ const updateCourse = async (req, res, next) => {
       new: true,
       runValidators: true,
     });
+    courseListCache.flushAll(); // Clear cache on change
     res.json({
       success: true,
       data: course,
@@ -438,10 +444,29 @@ const deleteCourse = async (req, res, next) => {
     course.isPublished = false;
     await course.save();
 
+    courseListCache.flushAll(); // Clear cache on change
+
     res.json({
       success: true,
       message: "Course safely removed (soft delete).",
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * @desc    Upload an image and return URL (e.g. for projects)
+ * @route   POST /api/courses/upload-image
+ * @access  Private (Admin/Instructor)
+ */
+const uploadCourseImage = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "No image file provided" });
+    }
+    const url = await uploadToImageBB(req.file.buffer);
+    res.json({ success: true, data: { url } });
   } catch (err) {
     next(err);
   }
@@ -455,4 +480,5 @@ module.exports = {
   enrollCourse,
   updateCourse,
   deleteCourse,
+  uploadCourseImage,
 };
