@@ -2,6 +2,8 @@ const express = require('express');
 const router  = express.Router();
 const { protect } = require('../middleware/auth.middleware');
 const { authorize } = require('../middleware/role.middleware');
+const { authLimiter, emailLimiter } = require('../middleware/rateLimiter.middleware');
+const { acceptInviteValidation, handleValidation } = require('../middleware/authValidation.middleware');
 const {
   getMyProfile,
   updateMyProfile,
@@ -12,11 +14,16 @@ const {
   adminUpdateUser,
   adminDeleteUser,
   updateUserRole,
-  getPublicInstructors
+  getPublicInstructors,
+  inviteStaff,
+  acceptInvite
 } = require('../controllers/user.controller');
 
 // Public listing
 router.get('/instructors/public', getPublicInstructors);
+
+// Public: staff accepts invite (token-gated)
+router.post('/invite/accept', authLimiter, acceptInviteValidation, handleValidation, acceptInvite);
 
 // Current user (any authenticated user)
 router.get('/me',           protect, getMyProfile);
@@ -28,6 +35,7 @@ const adminRoles = [...superRoles, 'branch_admin', 'branch_management'];
 
 router.get('/',             protect, authorize(...adminRoles), getAllUsers);
 router.post('/',            protect, authorize(...superRoles), adminCreateUser);
+router.post('/invite',      protect, emailLimiter, authorize(...superRoles), inviteStaff);
 
 router.get('/:id',          protect, authorize(...adminRoles), getUserById);
 router.put('/:id',          protect, authorize(...adminRoles), adminUpdateUser);
