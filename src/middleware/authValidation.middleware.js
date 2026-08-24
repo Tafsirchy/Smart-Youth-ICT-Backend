@@ -82,6 +82,16 @@ const resetPasswordValidation = [
   passwordRules,
 ];
 
+const acceptInviteValidation = [
+  body("token")
+    .isString()
+    .withMessage("Invite token is required")
+    .trim()
+    .notEmpty()
+    .withMessage("Invite token is required"),
+  passwordRules,
+];
+
 const googleAuthValidation = [
   body("idToken")
     .isString()
@@ -123,6 +133,7 @@ module.exports = {
   loginValidation,
   forgotPasswordValidation,
   resetPasswordValidation,
+  acceptInviteValidation,
   googleAuthValidation,
   handleValidation,
 };
