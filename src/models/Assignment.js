@@ -7,6 +7,11 @@ const assignmentSchema = new mongoose.Schema(
       ref: 'Course',
       required: true,
     },
+    branchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Branch',
+      index: true,
+    },
     // The specific topic or lesson this assignment belongs to
     lessonTitle: {
       type: String,
