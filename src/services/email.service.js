@@ -170,6 +170,46 @@ const emailService = {
   },
 
   /**
+   * 📨 Staff Invite (role + branch pre-assigned; staff sets own password)
+   */
+  sendStaffInvite: async (user, branch, role, setupUrl) => {
+    const roleLabels = {
+      instructor: 'Instructor',
+      branch_admin: 'Branch Admin',
+      branch_management: 'Branch Management'
+    };
+    const content = `
+      <p>Dear <strong>${user.name}</strong>,</p>
+      <p>You have been appointed as <strong>${roleLabels[role] || role}</strong> at the <strong>${branch.name}</strong> branch of SYICT. An account has been created for you.</p>
+
+      <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; padding: 20px; border-radius: 12px; margin: 30px 0;">
+        <p style="margin: 0; color: #1e40af; font-size: 14px;"><strong>Assigned Role:</strong> ${roleLabels[role] || role}</p>
+        <p style="margin: 8px 0 0 0; color: #1e40af; font-size: 14px;"><strong>Branch:</strong> ${branch.name} (${branch.code || 'N/A'})</p>
+        <p style="margin: 8px 0 0 0; color: #1e40af; font-size: 14px;"><strong>Login Email:</strong> ${user.email}</p>
+      </div>
+
+      <p>To activate your account, please choose a secure password using the button below.</p>
+
+      <div style="text-align: center; margin: 35px 0;">
+        <a href="${setupUrl}" style="background-color: #2563eb; color: #ffffff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 16px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.4);">Set My Password</a>
+      </div>
+
+      <div style="background-color: #fff1f2; border-left: 4px solid #e11d48; padding: 15px 20px; border-radius: 8px; margin: 30px 0;">
+        <p style="color: #9f1239; font-size: 13px; margin: 0;"><strong>Security Note:</strong> This link expires in 72 hours and is for your eyes only — never share it with anyone.</p>
+      </div>
+
+      <p style="font-size: 13px; color: #94a3b8; text-align: center;">If the button above doesn't work, copy and paste the following link into your browser:</p>
+      <p style="font-size: 11px; color: #6366f1; text-align: center; word-break: break-all;">${setupUrl}</p>
+    `;
+    return emailService._send({
+      to: user.email,
+      subject: `📨 You've been invited to join SYICT — ${branch.name}`,
+      text: `You have been appointed as ${roleLabels[role] || role} at ${branch.name}. Set your password here: ${setupUrl}`,
+      html: wrapLayout('Staff Invitation', content, 'Welcome to the SYICT team.')
+    });
+  },
+
+  /**
    * 📝 Assignment Feedback (Academic Progress)
    */
   sendAssignmentFeedback: async (student, assignment, grade) => {
