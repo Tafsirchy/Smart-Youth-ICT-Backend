@@ -54,6 +54,7 @@ exports.submitAssignment = async (req, res, next) => {
     const submission = await Submission.create({
       assignment: assignmentId,
       student: req.user._id,
+      branchId: req.user.branchId, // Denormalized branchId for isolation
       fileUrl: cleanFileUrl, 
       notes: typeof notes === 'string' ? require('sanitize-html')(notes) : notes,
     });
@@ -73,15 +74,20 @@ exports.createAssignment = async (req, res, next) => {
     const { course: courseId, title, lessonTitle, description, dueDate, points, status } = req.body;
     
     // Authorization: Ensure instructor owns the course
+    const course = await require('../models/Course').findById(courseId);
+    if (!course) {
+      return res.status(404).json({ success: false, message: 'Course not found' });
+    }
+
     if (req.user.role === 'instructor') {
-      const course = await require('../models/Course').findById(courseId);
-      if (course?.instructor?.toString() !== req.user._id.toString()) {
+      if (course.instructor?.toString() !== req.user._id.toString()) {
         return res.status(403).json({ success: false, message: 'You can only create assignments for your own courses' });
       }
     }
 
     const assignment = await Assignment.create({
       course: courseId,
+      branchId: course.branchId,
       title,
       lessonTitle,
       description,
