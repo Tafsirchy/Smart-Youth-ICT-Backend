@@ -33,6 +33,7 @@ const UserSchema = new mongoose.Schema(
       default: "student",
     },
     branchId: { type: mongoose.Schema.Types.ObjectId, ref: "Branch", index: true },
+    secondaryBranches: [{ type: mongoose.Schema.Types.ObjectId, ref: "Branch", index: true }],
     language: { type: String, enum: ["bn", "en"], default: "bn" },
     avatar: { type: String, default: "" },
     expertise: [String],
@@ -62,6 +63,10 @@ const UserSchema = new mongoose.Schema(
     // Email verification
     verificationToken: String,
     verificationExpiry: Date,
+
+    // Staff invite (set-password link)
+    inviteToken: String,
+    inviteExpiry: Date,
   },
   { timestamps: true },
 );
