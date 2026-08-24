@@ -54,3 +54,14 @@ exports.getPublicBranches = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+// @desc    Get detailed list of active branches for public directory
+// @route   GET /api/branches/public/all
+// @access  Public
+exports.getPublicBranchesDetailed = async (req, res, next) => {
+  try {
+    const branches = await require('../models/Branch').find({ isActive: true })
+      .select('name code address contact location officeHours')
+      .sort('name');
+    res.json({ success: true, count: branches.length, data: branches });
+  } catch (err) { next(err); }
+};
