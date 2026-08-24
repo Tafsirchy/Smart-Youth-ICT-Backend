@@ -13,7 +13,10 @@ const authorizeBranch = (req, res, next) => {
     return res.status(400).json({ message: "Branch ID is required for this action." });
   }
   
-  if (req.user?.branchId?.toString() !== targetBranch.toString()) {
+  const { getAllowedBranches } = require("../utils/branchHelper");
+  const allowedBranches = getAllowedBranches(req.user);
+
+  if (!allowedBranches.includes(targetBranch.toString())) {
     return res.status(403).json({ message: "Access denied: You do not have permission for this branch." });
   }
   
