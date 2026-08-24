@@ -1,5 +1,8 @@
 const User = require('../models/User');
 const Enrollment = require('../models/Enrollment');
+const crypto = require('crypto');
+const Branch = require('../models/Branch');
+const emailService = require('../services/email.service');
 
 // @desc    Get current user profile
 // @route   GET /api/users/me
@@ -37,7 +40,14 @@ exports.getAllUsers = async (req, res, next) => {
     
     // 🛡️ Security Fix: Enforce Branch Isolation (IDOR Mitigation)
     if (['branch_admin', 'branch_management'].includes(req.user.role)) {
-      filter.branchId = req.user.branchId;
+      const { getAllowedBranches } = require('../utils/branchHelper');
+      const allowedBranches = getAllowedBranches(req.user);
+      
+      if (branchId && allowedBranches.includes(branchId.toString())) {
+        filter.branchId = branchId;
+      } else {
+        filter.branchId = { $in: allowedBranches };
+      }
     } else if (branchId) {
       filter.branchId = branchId;
     }
@@ -82,7 +92,8 @@ exports.getUserById = async (req, res, next) => {
     
     // 🛡️ Security Fix: Branch Isolation Check
     if (['branch_admin', 'branch_management'].includes(req.user.role)) {
-      if (user.branchId?.toString() !== req.user.branchId?.toString()) {
+      const { getAllowedBranches } = require('../utils/branchHelper');
+      if (!getAllowedBranches(req.user).includes(user.branchId?.toString())) {
         return res.status(403).json({ success: false, message: 'Access denied: User belongs to another branch' });
       }
     }
@@ -103,7 +114,8 @@ exports.toggleUserStatus = async (req, res, next) => {
 
     // 🛡️ Security Fix: Branch Isolation Check
     if (['branch_admin', 'branch_management'].includes(req.user.role)) {
-      if (user.branchId?.toString() !== req.user.branchId?.toString()) {
+      const { getAllowedBranches } = require('../utils/branchHelper');
+      if (!getAllowedBranches(req.user).includes(user.branchId?.toString())) {
         return res.status(403).json({ success: false, message: 'Access denied: Target user belongs to another branch' });
       }
     }
@@ -141,6 +153,117 @@ exports.adminCreateUser = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+// @desc    Super Admin invites a staff member (role + branch pre-assigned, staff sets own password via emailed link)
+// @route   POST /api/users/invite
+// @access  Private (super_admin / super_management)
+const INVITABLE_ROLES = ['instructor', 'branch_admin', 'branch_management'];
+const INVITE_EXPIRY_MS = 72 * 3600000; // 72 hours
+
+exports.inviteStaff = async (req, res, next) => {
+  try {
+    const { name, email, role, branchId, phone } = req.body;
+
+    if (!INVITABLE_ROLES.includes(role)) {
+      return res.status(400).json({ success: false, message: 'Invalid role. Invitable roles: instructor, branch_admin, branch_management' });
+    }
+    if (!branchId) {
+      return res.status(400).json({ success: false, message: 'Branch is required for staff assignment' });
+    }
+    const branch = await Branch.findById(branchId);
+    if (!branch) return res.status(400).json({ success: false, message: 'Branch not found' });
+
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const existing = await User.findOne({ email: normalizedEmail });
+
+    let user;
+    if (existing) {
+      // Already a completed account -> do not leak or overwrite
+      if (existing.hasProvider('credentials') && existing.password) {
+        return res.status(409).json({ success: false, message: 'Email already registered' });
+      }
+      // Pending invite exists -> regenerate token and resend
+      user = existing;
+      if (!INVITABLE_ROLES.includes(existing.role)) {
+        return res.status(409).json({ success: false, message: 'Email already registered' });
+      }
+      user.name = name || user.name;
+      user.role = role;
+      user.branchId = branchId;
+      if (phone !== undefined) user.phone = phone;
+    } else {
+      user = new User({
+        name,
+        email: normalizedEmail,
+        phone: phone || '',
+        role,
+        branchId,
+        providers: [], // no credentials until invite accepted
+        isVerified: true
+      });
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    user.inviteToken = crypto.createHash('sha256').update(token).digest('hex');
+    user.inviteExpiry = Date.now() + INVITE_EXPIRY_MS;
+    await user.save({ validateBeforeSave: false });
+
+    const locale = user.language === 'en' ? 'en' : 'bn';
+    const setupUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/${locale}/accept-invite?token=${token}`;
+
+    setTimeout(() => {
+      emailService.sendStaffInvite(user, branch, role, setupUrl)
+        .catch(err => console.error('[Staff Invite Email Failed]', err.message));
+    }, 0);
+
+    const responseUser = await User.findById(user._id).select('-password -inviteToken -inviteExpiry');
+    res.status(201).json({
+      success: true,
+      data: responseUser,
+      message: `Invitation sent to ${user.email}. The link expires in 72 hours.`
+    });
+  } catch (err) { next(err); }
+};
+
+// @desc    Accept staff invite: set password using emailed token
+// @route   POST /api/users/invite/accept
+// @access  Public (token-gated)
+exports.acceptInvite = async (req, res, next) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) {
+      return res.status(400).json({ success: false, message: 'Token and password are required' });
+    }
+
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+    const user = await User.findOne({
+      inviteToken: hashedToken,
+      inviteExpiry: { $gt: Date.now() }
+    }).select('+password');
+
+    if (!user) {
+      return res.status(400).json({ success: false, message: 'Invitation link is invalid or has expired' });
+    }
+    if (!user.isActive) {
+      return res.status(403).json({ success: false, message: 'This account is disabled' });
+    }
+
+    user.password = password; // hashed by pre-save hook
+    user.addProvider('credentials');
+    user.inviteToken = undefined;
+    user.inviteExpiry = undefined;
+    user.isVerified = true;
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
+    await user.save();
+
+    setTimeout(() => {
+      emailService.sendPasswordChangedAlert(user)
+        .catch(err => console.error('[Password Changed Alert Failed]', err.message));
+    }, 0);
+
+    res.json({ success: true, message: 'Account activated. Please log in.' });
+  } catch (err) { next(err); }
+};
+
 // @desc    Admin: Update any user details
 // @route   PUT /api/users/:id
 // @access  Private (admin/super_admin)
@@ -156,7 +279,8 @@ exports.adminUpdateUser = async (req, res, next) => {
 
     // 🛡️ Security Fix: Branch Isolation Check
     if (!isSuper && ['branch_admin', 'branch_management'].includes(req.user.role)) {
-      if (user.branchId?.toString() !== req.user.branchId?.toString()) {
+      const { getAllowedBranches } = require('../utils/branchHelper');
+      if (!getAllowedBranches(req.user).includes(user.branchId?.toString())) {
         return res.status(403).json({ success: false, message: 'Access denied: Target user belongs to another branch' });
       }
     }
