@@ -38,17 +38,37 @@ const getCourses = async (req, res, next) => {
 
     // Default filter for public endpoints
     const filter = { isDeleted: false };
-    // 🛡️ Security Fix: Restrict 'includeUnpublished' to authorized staff
-    const isStaff = req.user && ['super_admin', 'super_management', 'branch_admin', 'branch_management', 'instructor'].includes(req.user.role);
+    // 🛡️ Security Fix: Restrict 'includeUnpublished' to authorized staff with Strict Branch Isolation
+    const isSuper = req.user && ['super_admin', 'super_management'].includes(req.user.role);
+    const isBranchStaff = req.user && ['branch_admin', 'branch_management', 'instructor'].includes(req.user.role);
+    const isStaff = isSuper || isBranchStaff;
+
+    if (category) filter.category = String(category);
+
+    // Multi-tenant filtering
+    if (isBranchStaff) {
+      const { getAllowedBranches } = require("../utils/branchHelper");
+      const allowedBranches = getAllowedBranches(req.user);
+      
+      if (includeUnpublished === "true") {
+        if (branchId && allowedBranches.includes(String(branchId))) {
+          filter.branchId = String(branchId);
+        } else {
+          filter.branchId = { $in: allowedBranches };
+        }
+      } else if (branchId) {
+        filter.branchId = String(branchId);
+      }
+    } else if (branchId) {
+      filter.branchId = String(branchId);
+    }
+
     if (includeUnpublished === "true" && isStaff) {
       // Allow viewing unpublished
     } else {
       filter.isPublished = true;
     }
-    if (category) filter.category = String(category);
 
-    // Multi-tenant filtering
-    if (branchId) filter.branchId = String(branchId);
     if (isMaster !== undefined) filter.isMaster = isMaster === "true";
     if (isPopular !== undefined) filter.isPopular = isPopular === "true";
 
@@ -111,6 +131,20 @@ const getCourseBySlug = async (req, res, next) => {
         .status(404)
         .json({ success: false, message: "Course not found" });
     }
+
+    // If it's a master course, find all branches that offer it
+    if (course.isMaster) {
+      const childCourses = await Course.find({
+        masterCourseId: course._id,
+        isPublished: true,
+        isDeleted: false,
+      })
+        .select("branchId")
+        .lean();
+      
+      course.availableBranches = childCourses.map((c) => c.branchId);
+    }
+
     res.json({ success: true, data: course });
   } catch (err) {
     next(err);
@@ -259,16 +293,44 @@ const enrollCourse = async (req, res, next) => {
     const { id: courseId } = req.params;
     const userId = req.user._id;
 
-    const course = await Course.findById(courseId);
+    let course = await Course.findById(courseId);
     if (!course)
       return res
         .status(404)
         .json({ success: false, message: "Course not found" });
 
+    // Multi-branch: If enrolling in a Master course, they must specify a target branch
+    if (course.isMaster) {
+      const { targetBranchId } = req.body;
+      if (!targetBranchId) {
+        return res.status(400).json({
+          success: false,
+          message: "Please select a branch to enroll in this course.",
+        });
+      }
+
+      // Find the child course for that branch
+      const childCourse = await Course.findOne({
+        masterCourseId: course._id,
+        branchId: targetBranchId,
+        isDeleted: false,
+      });
+
+      if (!childCourse) {
+        return res.status(400).json({
+          success: false,
+          message: "This course is not currently available at the selected branch.",
+        });
+      }
+
+      // Switch the target course to the branch-specific child course
+      course = childCourse;
+    }
+
     // Check if already enrolled
     const existing = await Enrollment.findOne({
       user: userId,
-      course: courseId,
+      course: course._id,
     });
     if (existing) {
       return res
@@ -282,8 +344,8 @@ const enrollCourse = async (req, res, next) => {
     // Create enrollment record
     const enrollment = await Enrollment.create({
       user: userId,
-      course: courseId,
-      branchId: course.branchId, // Inherit branch from course
+      course: course._id,
+      branchId: course.branchId, // Inherit branch from child course
       paymentStatus: "pending",
       isActive: false,
     });
@@ -333,6 +395,17 @@ const updateCourse = async (req, res, next) => {
           success: false,
           message: "Cannot edit a course you do not own",
         });
+    }
+
+    // 🛡️ Security Fix: Branch Admin Isolation Check (IDOR Mitigation)
+    if (['branch_admin', 'branch_management'].includes(req.user.role)) {
+      const { getAllowedBranches } = require("../utils/branchHelper");
+      if (!getAllowedBranches(req.user).includes(course.branchId?.toString())) {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied: Cannot edit a course from another branch",
+        });
+      }
     }
 
     let thumbnailUrl = course.thumbnail;
@@ -438,6 +511,17 @@ const deleteCourse = async (req, res, next) => {
           success: false,
           message: "Cannot delete a course you do not own",
         });
+    }
+
+    // 🛡️ Security Fix: Branch Admin Isolation Check (IDOR Mitigation)
+    if (['branch_admin', 'branch_management'].includes(req.user.role)) {
+      const { getAllowedBranches } = require("../utils/branchHelper");
+      if (!getAllowedBranches(req.user).includes(course.branchId?.toString())) {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied: Cannot delete a course from another branch",
+        });
+      }
     }
 
     course.isDeleted = true;
