@@ -12,6 +12,11 @@ const submissionSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    branchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Branch',
+      index: true,
+    },
     fileUrl: {
       type: String, // Can be a drive link, github link, or uploaded zip via ImageBB/S3
       required: true,
