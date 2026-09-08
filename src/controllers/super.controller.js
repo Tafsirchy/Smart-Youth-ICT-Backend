@@ -10,6 +10,7 @@ const HelpArticle = require('../models/HelpArticle');
 const slugify = require('slugify');
 const emailService = require('../services/email.service');
 const sanitizeHtml = require('sanitize-html');
+const { clearCourseCache } = require('./course.controller');
 
 // @desc    Get global analytics (Super Admin only)
 // @route   GET /api/super/stats
@@ -59,20 +60,39 @@ exports.getAllBranchesDetails = async (req, res, next) => {
     try {
         const branches = await Branch.find().sort('-createdAt');
         
+        let totalStudentsCount = 0;
+        let totalCoursesCount = 0;
+
         // Enhance with quick stats per branch
         const enhancedBranches = await Promise.all(branches.map(async (b) => {
             const studentCount = await User.countDocuments({ branchId: b._id, role: 'student' });
-            const courseCount  = await Enrollment.distinct('course', { branchId: b._id }).countDocuments(); // Simplified
+            const courseCount = await Course.countDocuments({ 
+              $or: [{ branchId: b._id }, { availableBranches: b._id }, { isAllBranches: true }],
+              isDeleted: false
+            });
+            totalStudentsCount += studentCount;
+            totalCoursesCount += courseCount;
+
             return {
                 ...b._doc,
                 stats: {
                     students: studentCount,
-                    courses:  courseCount
+                    courses: courseCount
                 }
             };
         }));
 
-        res.json({ success: true, data: enhancedBranches });
+        res.json({ 
+            success: true, 
+            summary: {
+                totalBranches: branches.length,
+                activeBranches: branches.filter(b => b.isActive).length,
+                inactiveBranches: branches.filter(b => !b.isActive).length,
+                totalStudents: totalStudentsCount,
+                totalCourses: totalCoursesCount
+            },
+            data: enhancedBranches 
+        });
     } catch (err) {
         next(err);
     }
@@ -122,6 +142,148 @@ exports.deployMasterCourse = async (req, res, next) => {
   }
 };
 
+// @desc    Get all courses with assignment status for a branch
+// @route   GET /api/super/branches/:id/courses
+// @access  Private (Super Admin)
+exports.getBranchCoursesAssignment = async (req, res, next) => {
+  try {
+    const branch = await Branch.findById(req.params.id);
+    if (!branch) return res.status(404).json({ success: false, message: 'Branch not found' });
+
+    const courses = await Course.find({ isDeleted: false })
+      .select('title slug category thumbnail price originalPrice mode duration isPublished isAllBranches availableBranches branchId')
+      .sort('title.en title.bn');
+
+    const branchIdStr = branch._id.toString();
+    const branchCourseIds = (branch.courses || []).map(id => id.toString());
+
+    const result = courses.map((c) => {
+      const isAvailableInBranch =
+        Boolean(c.isAllBranches) ||
+        (Array.isArray(c.availableBranches) && c.availableBranches.some(b => b.toString() === branchIdStr)) ||
+        (c.branchId && c.branchId.toString() === branchIdStr) ||
+        branchCourseIds.includes(c._id.toString());
+
+      return {
+        _id: c._id,
+        title: c.title,
+        slug: c.slug,
+        category: c.category,
+        thumbnail: c.thumbnail,
+        price: c.price,
+        originalPrice: c.originalPrice,
+        mode: c.mode,
+        duration: c.duration,
+        isPublished: c.isPublished,
+        isAllBranches: Boolean(c.isAllBranches),
+        isAssigned: isAvailableInBranch,
+      };
+    });
+
+    res.json({
+      success: true,
+      branch: {
+        _id: branch._id,
+        name: branch.name,
+        code: branch.code,
+      },
+      data: result,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc    Update courses assigned to a branch
+// @route   PUT /api/super/branches/:id/courses
+// @access  Private (Super Admin)
+exports.updateBranchCoursesAssignment = async (req, res, next) => {
+  try {
+    const { courseIds } = req.body;
+    if (!Array.isArray(courseIds)) {
+      return res.status(400).json({ success: false, message: 'courseIds must be an array of IDs' });
+    }
+
+    const branch = await Branch.findById(req.params.id);
+    if (!branch) return res.status(404).json({ success: false, message: 'Branch not found' });
+
+    // 1. Update Branch.courses
+    branch.courses = courseIds;
+    await branch.save();
+
+    // 2. Add branch to availableBranches for assigned courses
+    await Course.updateMany(
+      { _id: { $in: courseIds } },
+      { $addToSet: { availableBranches: branch._id } }
+    );
+
+    // 3. Remove branch from availableBranches for unassigned courses
+    await Course.updateMany(
+      { _id: { $nin: courseIds }, availableBranches: branch._id },
+      { $pull: { availableBranches: branch._id } }
+    );
+
+    // Audit log
+    await AuditLog.create({
+      actor: req.user._id,
+      action: 'UPDATE_BRANCH_COURSES',
+      entity: 'Branch',
+      entityId: branch._id,
+      details: { branchName: branch.name, assignedCount: courseIds.length }
+    });
+
+    // Flush cache so public and frontend instantly reflect changes
+    if (typeof clearCourseCache === 'function') {
+      clearCourseCache();
+    }
+
+    res.json({
+      success: true,
+      message: `Successfully updated courses for ${branch.name}. ${courseIds.length} courses are now available.`,
+      count: courseIds.length,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc    Toggle whether a course is available across all branches
+// @route   PATCH /api/super/courses/:id/toggle-all-branches
+// @access  Private (Super Admin)
+exports.toggleCourseAllBranches = async (req, res, next) => {
+  try {
+    const course = await Course.findById(req.params.id);
+    if (!course) return res.status(404).json({ success: false, message: 'Course not found' });
+
+    const { isAllBranches } = req.body;
+    course.isAllBranches = isAllBranches !== undefined ? Boolean(isAllBranches) : !course.isAllBranches;
+    await course.save();
+
+    if (typeof clearCourseCache === 'function') {
+      clearCourseCache();
+    }
+
+    await AuditLog.create({
+      actor: req.user._id,
+      action: 'TOGGLE_COURSE_ALL_BRANCHES',
+      entity: 'Course',
+      entityId: course._id,
+      details: { courseTitle: course.title, isAllBranches: course.isAllBranches }
+    });
+
+    res.json({
+      success: true,
+      message: `Course availability updated: ${course.isAllBranches ? 'Available in all campuses' : 'Campus specific'}`,
+      data: {
+        _id: course._id,
+        isAllBranches: course.isAllBranches
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // @desc    Get consolidated finance report
 // @route   GET /api/super/finance
 // @access  Private (Super Admin)
@@ -160,8 +322,8 @@ exports.getGlobalFinanceReport = async (req, res, next) => {
 exports.onboardBranch = async (req, res, next) => {
   try {
     const { 
-      name, code, type, establishedDate, logo, website,
-      address, location, contact, officeHours,
+      name, code, type, division, establishedDate, logo, coverImage, gallery, facilities, website,
+      address, location, contact, whatsapp, notice, officeHours,
       adminName, adminEmail, adminPassword 
     } = req.body;
 
@@ -180,32 +342,41 @@ exports.onboardBranch = async (req, res, next) => {
       name, 
       code, 
       type, 
+      division: division || 'Dhaka',
       establishedDate, 
       logo, 
+      coverImage,
+      gallery: Array.isArray(gallery) ? gallery : [],
+      facilities: Array.isArray(facilities) ? facilities : [],
       website,
       address, 
       location: geoJSONLocation, 
       contact, 
+      whatsapp,
+      notice,
       officeHours,
       slug: slugify(name, { lower: true })
     });
 
-    // 2. Create Primary Branch Admin
-    const admin = await User.create({
-      name: adminName,
-      email: adminEmail,
-      password: adminPassword,
-      role: 'branch_admin',
-      branchId: branch._id
-    });
+    // 2. Create Primary Branch Admin if provided
+    let admin = null;
+    if (adminEmail && adminPassword && adminName) {
+      admin = await User.create({
+        name: adminName,
+        email: adminEmail,
+        password: adminPassword,
+        role: 'branch_admin',
+        branchId: branch._id
+      });
 
-    // 📧 Notify Branch Admin with temporary credentials
-    emailService.sendBranchOnboarding(admin, branch, adminPassword)
-      .catch(err => console.error('[Onboarding Email Failed]', err.message));
+      // 📧 Notify Branch Admin with temporary credentials
+      emailService.sendBranchOnboarding(admin, branch, adminPassword)
+        .catch(err => console.error('[Onboarding Email Failed]', err.message));
+    }
 
     res.status(201).json({
       success: true,
-      data: { branch, admin: { id: admin._id, name: admin.name, email: admin.email } },
+      data: { branch, admin: admin ? { id: admin._id, name: admin.name, email: admin.email } : null },
       message: `Strategic location ${name} (${code}) onboarded successfully.`
     });
   } catch (err) {
@@ -237,6 +408,32 @@ exports.updateBranch = async (req, res, next) => {
     await AuditLog.create({ actor: req.user._id, action: 'UPDATE_BRANCH', entity: 'Branch', entityId: branch._id, details: { name: branch.name } });
 
     res.json({ success: true, data: branch });
+  } catch (err) { next(err); }
+};
+
+// @desc    Toggle branch active status (Activate / Deactivate)
+// @route   PATCH /api/super/branches/:id/toggle-status
+// @access  Private (Super Admin)
+exports.toggleBranchStatus = async (req, res, next) => {
+  try {
+    const branch = await Branch.findById(req.params.id);
+    if (!branch) return res.status(404).json({ success: false, message: 'Branch not found' });
+
+    branch.isActive = !branch.isActive;
+    await branch.save();
+
+    await AuditLog.create({ 
+      actor: req.user._id, 
+      action: branch.isActive ? 'ACTIVATE_BRANCH' : 'DEACTIVATE_BRANCH', 
+      entity: 'Branch', 
+      entityId: branch._id 
+    });
+
+    res.json({ 
+      success: true, 
+      data: branch, 
+      message: `Branch ${branch.name} is now ${branch.isActive ? 'Active' : 'Inactive'}` 
+    });
   } catch (err) { next(err); }
 };
 
