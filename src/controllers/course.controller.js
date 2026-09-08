@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Course = require("../models/Course");
 const Enrollment = require("../models/Enrollment");
 const { uploadToImageBB } = require("../services/imagebb.service");
@@ -45,6 +46,30 @@ const getCourses = async (req, res, next) => {
 
     if (category) filter.category = String(category);
 
+    const buildBranchFilter = (targetBranchId) => {
+      const isOid = mongoose.Types.ObjectId.isValid(targetBranchId);
+      const conditions = [
+        { branchId: targetBranchId },
+        { availableBranches: targetBranchId },
+        { isAllBranches: true }
+      ];
+      if (isOid) {
+        const oid = new mongoose.Types.ObjectId(targetBranchId);
+        conditions.push({ branchId: oid });
+        conditions.push({ availableBranches: oid });
+      }
+      return conditions;
+    };
+
+    const buildAllowedBranchesFilter = (branches) => {
+      const validOids = branches.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
+      return [
+        { branchId: { $in: [...branches, ...validOids] } },
+        { availableBranches: { $in: [...branches, ...validOids] } },
+        { isAllBranches: true }
+      ];
+    };
+
     // Multi-tenant filtering
     if (isBranchStaff) {
       const { getAllowedBranches } = require("../utils/branchHelper");
@@ -52,15 +77,15 @@ const getCourses = async (req, res, next) => {
       
       if (includeUnpublished === "true") {
         if (branchId && allowedBranches.includes(String(branchId))) {
-          filter.branchId = String(branchId);
+          filter.$or = buildBranchFilter(branchId);
         } else {
-          filter.branchId = { $in: allowedBranches };
+          filter.$or = buildAllowedBranchesFilter(allowedBranches);
         }
       } else if (branchId) {
-        filter.branchId = String(branchId);
+        filter.$or = buildBranchFilter(branchId);
       }
     } else if (branchId) {
-      filter.branchId = String(branchId);
+      filter.$or = buildBranchFilter(branchId);
     }
 
     if (includeUnpublished === "true" && isStaff) {
@@ -82,7 +107,7 @@ const getCourses = async (req, res, next) => {
     }
 
     const coursesPromise = Course.find(filter)
-      .select("title slug thumbnail price originalPrice category instructor tagline totalStudents isPopular mode duration branchId")
+      .select("title slug thumbnail price originalPrice category instructor tagline totalStudents isPopular mode duration branchId availableBranches isAllBranches")
       .populate("instructor", "name avatar")
       .sort("-createdAt")
       .skip((Math.max(1, Number(page)) - 1) * Number(limit))
@@ -565,4 +590,5 @@ module.exports = {
   updateCourse,
   deleteCourse,
   uploadCourseImage,
+  clearCourseCache: () => courseListCache.flushAll(),
 };
