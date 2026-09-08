@@ -4,11 +4,15 @@ const {
   getAllBranchesDetails, 
   updateBranch,
   deleteBranch,
+  toggleBranchStatus,
+  getBranchCoursesAssignment,
+  updateBranchCoursesAssignment,
   onboardBranch,
   createMasterCourse,
   updateMasterCourse,
   getMasterCourses,
   deployMasterCourse, 
+  toggleCourseAllBranches, 
   getGlobalFinanceReport, 
   getAuditLogs,
   getTickets,
@@ -38,7 +42,10 @@ router.get('/audit-logs', getAuditLogs);
 router.get('/branches',    getAllBranchesDetails);
 router.post('/onboard-branch', onboardBranch);
 router.put('/branches/:id',    updateBranch);
+router.patch('/branches/:id/toggle-status', toggleBranchStatus);
 router.delete('/branches/:id', deleteBranch);
+router.get('/branches/:id/courses', getBranchCoursesAssignment);
+router.put('/branches/:id/courses', updateBranchCoursesAssignment);
 
 // Master Curriculum
 router.get('/courses',           getMasterCourses);
@@ -46,6 +53,7 @@ router.post('/courses',          createMasterCourse);
 router.put('/courses/:id',       updateMasterCourse);
 router.delete('/courses/:id',    deleteMasterCourse);
 router.post('/deploy-course',    deployMasterCourse);
+router.patch('/courses/:id/toggle-all-branches', toggleCourseAllBranches);
 
 // Global Finance
 router.get('/finance',         getGlobalFinanceReport);
