@@ -45,6 +45,14 @@ const CourseSchema = new mongoose.Schema(
       ref: "Branch",
       index: true,
     },
+    availableBranches: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Branch",
+        index: true,
+      },
+    ],
+    isAllBranches: { type: Boolean, default: false, index: true },
     isMaster: { type: Boolean, default: false },
     masterCourseId: { type: mongoose.Schema.Types.ObjectId, ref: "Course" },
     description: { bn: String, en: String },
