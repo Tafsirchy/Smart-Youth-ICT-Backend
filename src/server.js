@@ -116,6 +116,7 @@ app.use(`${API}/portfolio`, portfolioRoutes);
 app.use(`${API}/affiliate`, affiliateRoutes);
 app.use(`${API}/crm`, crmRoutes);
 app.use(`${API}/seminar`, seminarRoutes);
+app.use(`${API}/seminars`, seminarRoutes);
 app.use(`${API}/branches`, branchRoutes);
 app.use(`${API}/sessions`, sessionRoutes);
 app.use(`${API}/assets`, assetRoutes);

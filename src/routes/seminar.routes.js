@@ -11,8 +11,11 @@ const {
 // Public — anyone can register
 router.post('/register', registerForSeminar);
 
-// Admin — view registrations and mark attendance
-router.get('/',            protect, authorize('admin'), getAllRegistrations);
-router.patch('/:id/attend',protect, authorize('admin'), markAttended);
+// Admin / Staff — view registrations and mark attendance
+const staffRoles = authorize('admin', 'branch_admin', 'super_admin', 'branch_management', 'super_management');
+router.get('/',                  protect, staffRoles, getAllRegistrations);
+router.get('/registrations',     protect, staffRoles, getAllRegistrations);
+router.patch('/:id/attend',      protect, staffRoles, markAttended);
+router.patch('/registrations/:id', protect, staffRoles, markAttended);
 
 module.exports = router;
