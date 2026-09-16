@@ -15,7 +15,7 @@ const apiLimiter = rateLimit({
 });
 const emailLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max:      3,
+  max:      50,
   message:  { message: 'You have reached the maximum number of email requests. Please try again in an hour.' },
   standardHeaders: true,
   legacyHeaders:   false,
