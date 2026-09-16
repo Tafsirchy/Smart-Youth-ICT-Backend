@@ -51,4 +51,10 @@ const TestimonialSchema = new mongoose.Schema(
 TestimonialSchema.index({ moderationStatus: 1 });
 TestimonialSchema.index({ isApproved: 1 });
 
-module.exports = mongoose.model("Testimonial", TestimonialSchema);
+const Testimonial = mongoose.model("Testimonial", TestimonialSchema);
+
+// Ensure legacy user_1_course_1 unique index is dropped if present in any environment
+Testimonial.collection?.dropIndex("user_1_course_1").catch(() => {});
+
+module.exports = Testimonial;
+
