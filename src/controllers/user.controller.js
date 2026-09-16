@@ -156,21 +156,29 @@ exports.adminCreateUser = async (req, res, next) => {
 // @desc    Super Admin invites a staff member (role + branch pre-assigned, staff sets own password via emailed link)
 // @route   POST /api/users/invite
 // @access  Private (super_admin / super_management)
-const INVITABLE_ROLES = ['instructor', 'branch_admin', 'branch_management'];
+const INVITABLE_ROLES = ['instructor', 'branch_admin', 'branch_management', 'super_admin', 'super_management', 'student'];
 const INVITE_EXPIRY_MS = 72 * 3600000; // 72 hours
 
 exports.inviteStaff = async (req, res, next) => {
   try {
-    const { name, email, role, branchId, phone } = req.body;
+    const { name, email, role = 'instructor', branchId, phone } = req.body;
 
     if (!INVITABLE_ROLES.includes(role)) {
-      return res.status(400).json({ success: false, message: 'Invalid role. Invitable roles: instructor, branch_admin, branch_management' });
+      return res.status(400).json({ success: false, message: `Invalid role. Invitable roles: ${INVITABLE_ROLES.join(', ')}` });
     }
-    if (!branchId) {
-      return res.status(400).json({ success: false, message: 'Branch is required for staff assignment' });
+
+    let branch = null;
+    let effectiveBranchId = branchId;
+
+    if (effectiveBranchId) {
+      branch = await Branch.findById(effectiveBranchId);
     }
-    const branch = await Branch.findById(branchId);
-    if (!branch) return res.status(400).json({ success: false, message: 'Branch not found' });
+
+    if (!branch && role !== 'super_admin' && role !== 'super_management') {
+      // Auto-fallback to head office or first active branch if not specified
+      branch = await Branch.findOne({ type: 'head_office', isActive: true }) || await Branch.findOne({ isActive: true });
+      if (branch) effectiveBranchId = branch._id;
+    }
 
     const normalizedEmail = String(email || '').trim().toLowerCase();
     const existing = await User.findOne({ email: normalizedEmail });
@@ -188,7 +196,7 @@ exports.inviteStaff = async (req, res, next) => {
       }
       user.name = name || user.name;
       user.role = role;
-      user.branchId = branchId;
+      if (effectiveBranchId) user.branchId = effectiveBranchId;
       if (phone !== undefined) user.phone = phone;
     } else {
       user = new User({
@@ -196,7 +204,7 @@ exports.inviteStaff = async (req, res, next) => {
         email: normalizedEmail,
         phone: phone || '',
         role,
-        branchId,
+        branchId: effectiveBranchId || undefined,
         providers: [], // no credentials until invite accepted
         isVerified: true
       });
@@ -208,10 +216,12 @@ exports.inviteStaff = async (req, res, next) => {
     await user.save({ validateBeforeSave: false });
 
     const locale = user.language === 'en' ? 'en' : 'bn';
-    const setupUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/${locale}/accept-invite?token=${token}`;
+    const setupUrl = `${process.env.FRONTEND_URL || 'https://www.smartyouthict.com'}/${locale}/accept-invite?token=${token}`;
+
+    const branchForEmail = branch || { name: 'Smart Youth ICT', code: 'HQ' };
 
     setTimeout(() => {
-      emailService.sendStaffInvite(user, branch, role, setupUrl)
+      emailService.sendStaffInvite(user, branchForEmail, role, setupUrl)
         .catch(err => console.error('[Staff Invite Email Failed]', err.message));
     }, 0);
 

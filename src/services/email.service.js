@@ -176,15 +176,21 @@ const emailService = {
     const roleLabels = {
       instructor: 'Instructor',
       branch_admin: 'Branch Admin',
-      branch_management: 'Branch Management'
+      branch_management: 'Branch Management',
+      super_admin: 'Super Admin',
+      super_management: 'Super Management',
+      student: 'Student'
     };
+    const branchName = branch?.name || 'Smart Youth ICT';
+    const branchInfo = branch?.code ? `${branchName} (${branch.code})` : branchName;
+
     const content = `
       <p>Dear <strong>${user.name}</strong>,</p>
-      <p>You have been appointed as <strong>${roleLabels[role] || role}</strong> at the <strong>${branch.name}</strong> branch of SYICT. An account has been created for you.</p>
+      <p>You have been invited to join as <strong>${roleLabels[role] || role}</strong> at <strong>${branchName}</strong>. An account has been provisioned for you.</p>
 
       <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; padding: 20px; border-radius: 12px; margin: 30px 0;">
         <p style="margin: 0; color: #1e40af; font-size: 14px;"><strong>Assigned Role:</strong> ${roleLabels[role] || role}</p>
-        <p style="margin: 8px 0 0 0; color: #1e40af; font-size: 14px;"><strong>Branch:</strong> ${branch.name} (${branch.code || 'N/A'})</p>
+        <p style="margin: 8px 0 0 0; color: #1e40af; font-size: 14px;"><strong>Branch / Department:</strong> ${branchInfo}</p>
         <p style="margin: 8px 0 0 0; color: #1e40af; font-size: 14px;"><strong>Login Email:</strong> ${user.email}</p>
       </div>
 
