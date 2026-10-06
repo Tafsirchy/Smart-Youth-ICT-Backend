@@ -5,7 +5,8 @@
   "main": "src/server.js",
   "scripts": {
     "dev": "nodemon src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "migrate:geo": "node -e \"require('dotenv').config();const m=require('mongoose');m.connect(process.env.MONGO_URI,{family:4}).then(async()=>{const r=await require('./src/utils/geospatial-migration')();console.log(r);await m.disconnect();process.exit(r.error?1:0);}).catch(e=>{console.error(e);process.exit(1);})\""
   },
   "dependencies": {
     "axios": "^1.13.6",
