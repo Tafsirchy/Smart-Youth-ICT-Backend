@@ -314,12 +314,16 @@ exports.adminUpdateUser = async (req, res, next) => {
       }
 
       user.role = role;
+      user.tokenVersion = (user.tokenVersion || 0) + 1; // Invalidate all existing sessions on role change
       if (branchId !== undefined) user.branchId = branchId;
     } else if (isSuper && branchId !== undefined) {
       user.branchId = branchId;
     }
 
     await user.save();
+    const userCache = require('../utils/userCache');
+    userCache.del(user._id);
+
     const updated = await User.findById(user._id).select('-password');
     res.json({ success: true, data: updated });
   } catch (err) { next(err); }
