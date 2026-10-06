@@ -4,6 +4,7 @@ const User = require("../models/User");
 const Branch = require("../models/Branch");
 const emailService = require("../services/email.service");
 const { generateToken } = require("../utils/jwt");
+const userCache = require("../utils/userCache");
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -24,6 +25,9 @@ const serializeUser = (user) => ({
 });
 
 const sendAuthResponse = (res, statusCode, user) => {
+  if (user?._id) {
+    userCache.del(user._id);
+  }
   const accessToken = generateToken(user);
 
   return res.status(statusCode).json({
