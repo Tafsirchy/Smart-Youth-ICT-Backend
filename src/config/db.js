@@ -24,8 +24,16 @@ async function connectDB() {
       family: 4,
     };
 
-    cached.promise = mongoose.connect(process.env.MONGO_URI, opts).then((m) => {
+    cached.promise = mongoose.connect(process.env.MONGO_URI, opts).then(async (m) => {
       console.log('✅ MongoDB Connected (New Connection established)');
+
+      // Keep the Branch.location field compatible with the 2dsphere index.
+      // Runs once per connection, does not block the request path.
+      const migrateToGeoJSON = require('../utils/geospatial-migration');
+      migrateToGeoJSON().catch((err) =>
+        console.error('[Migration] skipped:', err.message)
+      );
+
       return m;
     });
   }
