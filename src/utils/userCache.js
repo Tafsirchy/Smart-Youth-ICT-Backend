@@ -3,10 +3,10 @@ const NodeCache = require("node-cache");
 /**
  * Singleton Cache Service for User Security Lookups
  * 
- * Standard TTL: 15 Minutes (enough for significant DB offloading)
+ * Standard TTL: 60 Seconds (prevents duplicate queries on concurrent loads, while avoiding stale authorization)
  * Check period: 60 seconds (garbage collection)
  */
-const userCache = new NodeCache({ stdTTL: 900, checkperiod: 60 });
+const userCache = new NodeCache({ stdTTL: 60, checkperiod: 60 });
 
 module.exports = {
   /**
