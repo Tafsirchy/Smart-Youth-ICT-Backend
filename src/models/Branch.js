@@ -2,6 +2,8 @@ const mongoose = require("mongoose");
 
 const slugify = require("slugify");
 
+const { isValidPoint } = require("../utils/geoPoint");
+
 const BranchSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
@@ -30,7 +32,10 @@ const BranchSchema = new mongoose.Schema(
       type: {
         type: String,
         enum: ['Point'],
-        default: 'Point'
+        // No default on purpose: a default would materialise `location: { type: 'Point' }`
+        // on every document, and MongoDB's 2dsphere index rejects a Point without
+        // coordinates. Write paths add `type` together with `coordinates`.
+        default: undefined
       },
       coordinates: {
         type: [Number], // [longitude, latitude]
@@ -68,6 +73,30 @@ const BranchSchema = new mongoose.Schema(
 );
 
 BranchSchema.index({ location: "2dsphere" });
+
+// The 2dsphere index rejects any document whose `location` exists but is not a
+// real GeoJSON Point ("Can't extract geo keys"). Normalise/validate here so a bad
+// payload fails with a readable validation error (HTTP 400) instead of a 500.
+BranchSchema.pre("validate", function (next) {
+  const loc = this.location;
+
+  if (loc && typeof loc === "object") {
+    const coordinates = Array.isArray(loc.coordinates) ? loc.coordinates : [];
+
+    if (coordinates.length === 0) {
+      // No coordinates to index (e.g. the dashboard sends `lat: '', long: ''`
+      // when no point was picked) → drop the placeholder object entirely.
+      this.location = undefined;
+    } else if (!isValidPoint(loc)) {
+      this.invalidate(
+        "location",
+        "location must be a GeoJSON Point with a [longitude, latitude] pair"
+      );
+    }
+  }
+
+  next();
+});
 
 BranchSchema.pre("save", function (next) {
   if (this.isModified("name") || !this.slug) {
