@@ -10,6 +10,7 @@ const HelpArticle = require('../models/HelpArticle');
 const slugify = require('slugify');
 const emailService = require('../services/email.service');
 const sanitizeHtml = require('sanitize-html');
+const { parseLocation } = require('../utils/geoPoint');
 const { clearCourseCache } = require('./course.controller');
 
 // @desc    Get global analytics (Super Admin only)
@@ -327,20 +328,51 @@ exports.onboardBranch = async (req, res, next) => {
       adminName, adminEmail, adminPassword 
     } = req.body;
 
-    // Transform location to GeoJSON if it arrives as {lat, long}
-    let geoJSONLocation = location;
-    if (location && location.lat && location.long) {
-      geoJSONLocation = {
-        type: 'Point',
-        coordinates: [parseFloat(location.long), parseFloat(location.lat)],
-        googleMapsUrl: location.googleMapsUrl
-      };
+    // Normalise + validate the unique branch code up-front. Without this the
+    // duplicate surfaces as a raw MongoServerError ("E11000 duplicate key error
+    // collection: syict.branches index: code_1 ...") which is meaningless to the
+    // dashboard. The schema applies `uppercase`/`trim`, so compare the same way.
+    const normalizedCode = String(code || '').trim().toUpperCase();
+
+    if (!String(name || '').trim()) {
+      return res.status(400).json({ success: false, message: 'Branch name is required.' });
+    }
+
+    if (!normalizedCode) {
+      return res.status(400).json({ success: false, message: 'Branch code is required.' });
+    }
+
+    const codeClash = await Branch.exists({ code: normalizedCode });
+
+    if (codeClash) {
+      const taken = (await Branch.distinct('code')).map((c) => String(c).toUpperCase());
+      let suggestion = `${normalizedCode}-B`;
+      let n = 1;
+      while (taken.includes(`SYICT-${String(n).padStart(3, '0')}`)) n += 1;
+      if (!taken.includes(suggestion)) {
+        suggestion = `SYICT-${String(n).padStart(3, '0')}`;
+      }
+
+      return res.status(409).json({
+        success: false,
+        message: `Branch code "${normalizedCode}" is already in use. Try "${suggestion}" instead.`,
+        data: { field: 'code', value: normalizedCode, suggestion },
+      });
+    }
+
+    // Normalise location to GeoJSON. When the admin never picked a point on the
+    // map the client still sends `location: { lat: '', long: '' }`; persisting
+    // that would create an invalid Point and MongoDB's 2dsphere index would
+    // reject the whole document.
+    const parsedLocation = parseLocation(location);
+    if (!parsedLocation.valid) {
+      return res.status(400).json({ success: false, message: parsedLocation.error });
     }
 
     // 1. Create Branch with comprehensive metadata
     const branch = await Branch.create({
       name, 
-      code, 
+      code: normalizedCode, 
       type, 
       division: division || 'Dhaka',
       establishedDate, 
@@ -350,7 +382,7 @@ exports.onboardBranch = async (req, res, next) => {
       facilities: Array.isArray(facilities) ? facilities : [],
       website,
       address, 
-      location: geoJSONLocation, 
+      ...(parsedLocation.point ? { location: parsedLocation.point } : {}),
       contact, 
       whatsapp,
       notice,
@@ -390,18 +422,54 @@ exports.onboardBranch = async (req, res, next) => {
 // @access  Private (Super Admin)
 exports.updateBranch = async (req, res, next) => {
   try {
-    let updateData = { ...req.body };
-    
-    // Transform location to GeoJSON if it arrives as {lat, long}
-    if (updateData.location && updateData.location.lat && updateData.location.long) {
-      updateData.location = {
-        type: 'Point',
-        coordinates: [parseFloat(updateData.location.long), parseFloat(updateData.location.lat)],
-        googleMapsUrl: updateData.location.googleMapsUrl
-      };
+    const updateData = { ...req.body };
+    delete updateData._id;
+    delete updateData.__v;
+
+    const unset = {};
+
+    // Reject a code collision before MongoDB does, so the dashboard gets a
+    // readable message instead of "E11000 duplicate key error ...".
+    if ('code' in updateData) {
+      const normalizedCode = String(updateData.code || '').trim().toUpperCase();
+
+      if (!normalizedCode) {
+        return res.status(400).json({ success: false, message: 'Branch code is required.' });
+      }
+
+      const codeClash = await Branch.exists({ code: normalizedCode, _id: { $ne: req.params.id } });
+
+      if (codeClash) {
+        return res.status(409).json({
+          success: false,
+          message: `Branch code "${normalizedCode}" is already in use by another branch.`,
+          data: { field: 'code', value: normalizedCode },
+        });
+      }
+
+      updateData.code = normalizedCode;
     }
 
-    const branch = await Branch.findByIdAndUpdate(req.params.id, updateData, { new: true, runValidators: true });
+    if ('location' in updateData) {
+      const parsedLocation = parseLocation(updateData.location);
+
+      if (!parsedLocation.valid) {
+        return res.status(400).json({ success: false, message: parsedLocation.error });
+      }
+
+      if (parsedLocation.point) {
+        updateData.location = parsedLocation.point;
+      } else {
+        // Coordinates were cleared → remove the field entirely so the 2dsphere
+        // index never sees an empty Point.
+        delete updateData.location;
+        unset.location = 1;
+      }
+    }
+
+    const payload = Object.keys(unset).length ? { $set: updateData, $unset: unset } : updateData;
+
+    const branch = await Branch.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true });
     if (!branch) return res.status(404).json({ success: false, message: 'Branch not found' });
     
     // Log action
