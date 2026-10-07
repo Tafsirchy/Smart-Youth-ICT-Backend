@@ -13,12 +13,14 @@ const {
   getCertificationPrograms, createCertificationProgram, updateCertificationProgram, deleteCertificationProgram,
   getFreelancingPrograms, createFreelancingProgram, updateFreelancingProgram, deleteFreelancingProgram,
   getJobPlacements, createJobPlacement, updateJobPlacement, deleteJobPlacement,
-  getWebServiceContent, updateWebServiceContent
+  getWebServiceContent, updateWebServiceContent,
+  getSettingByKey
 } = require("../controllers/cms.controller");
 
 const router = express.Router();
 
 // 🔓 Public Routes (for the website)
+router.get("/settings/:key", getSettingByKey);
 router.get("/team", getTeam);
 router.get("/stories", getSuccessStories);
 router.get("/partners", getPartners);

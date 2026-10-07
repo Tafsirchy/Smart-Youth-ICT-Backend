@@ -10,6 +10,7 @@ const FreelancingTraining = require("../models/FreelancingTraining");
 const JobPlacement = require("../models/JobPlacement");
 const ServicePageContent = require("../models/ServicePageContent");
 const WebServiceContent = require("../models/WebServiceContent");
+const SystemSetting = require("../models/SystemSetting");
 
 /**
  * 🏢 Team Management (Core & Advisory)
@@ -92,7 +93,9 @@ exports.deleteSuccessStory = async (req, res, next) => {
  */
 exports.getPartners = async (req, res, next) => {
   try {
-    const partners = await Partner.find({ isActive: true }).sort("order");
+    const start = Date.now();
+    const partners = await Partner.find({ isActive: true }).sort("order").lean();
+    console.log(`[getPartners] DB query took ${Date.now() - start}ms`);
     res.json({ success: true, data: partners });
   } catch (err) { next(err); }
 };
@@ -409,5 +412,15 @@ exports.updateWebServiceContent = async (req, res, next) => {
       { new: true, upsert: true, runValidators: true }
     );
     res.json({ success: true, data: content });
+  } catch (err) { next(err); }
+};
+
+/**
+ * ⚙️ System Settings (Public Fetch)
+ */
+exports.getSettingByKey = async (req, res, next) => {
+  try {
+    const setting = await SystemSetting.findOne({ key: req.params.key });
+    res.json({ success: true, data: setting ? setting.value : null });
   } catch (err) { next(err); }
 };
