@@ -5,6 +5,7 @@ const {
   getTeam, createTeamMember, updateTeamMember, deleteTeamMember,
   getSuccessStories, adminGetSuccessStories, createSuccessStory, updateSuccessStory, deleteSuccessStory,
   getPartners, createPartner, updatePartner, deletePartner,
+  getMemberships, createMembership, updateMembership, deleteMembership,
   getMentors, createMentor, updateMentor, deleteMentor, toggleFeaturedMentor,
   getTestimonials, updateTestimonialStatus, createTestimonial, updateTestimonial, deleteTestimonial,
   getServicePageContent, updateServicePageContent,
@@ -21,6 +22,7 @@ const router = express.Router();
 router.get("/team", getTeam);
 router.get("/stories", getSuccessStories);
 router.get("/partners", getPartners);
+router.get("/memberships", getMemberships);
 router.get("/mentors", getMentors);
 router.get("/services/content/:pageType", getServicePageContent);
 router.get("/services/career-tracks", getCareerTracks);
@@ -51,6 +53,11 @@ router.delete("/stories/:id", deleteSuccessStory);
 router.post("/partners", createPartner);
 router.put("/partners/:id", updatePartner);
 router.delete("/partners/:id", deletePartner);
+
+// Memberships
+router.post("/memberships", createMembership);
+router.put("/memberships/:id", updateMembership);
+router.delete("/memberships/:id", deleteMembership);
 
 // Mentors
 router.post("/mentors", createMentor);
