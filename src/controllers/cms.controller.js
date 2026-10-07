@@ -1,6 +1,7 @@
 const TeamMember = require("../models/TeamMember");
 const SuccessStory = require("../models/SuccessStory");
 const Partner = require("../models/Partner");
+const Membership = require("../models/Membership");
 const User = require("../models/User");
 const Testimonial = require("../models/Testimonial");
 const CareerTrack = require("../models/CareerTrack");
@@ -114,6 +115,38 @@ exports.deletePartner = async (req, res, next) => {
   try {
     await Partner.findByIdAndDelete(req.params.id);
     res.json({ success: true, message: "Partner removed" });
+  } catch (err) { next(err); }
+};
+
+/**
+ * 🤝 Memberships (organisations SYICT is a member of)
+ */
+exports.getMemberships = async (req, res, next) => {
+  try {
+    const memberships = await Membership.find({ isActive: true }).sort("order");
+    res.json({ success: true, data: memberships });
+  } catch (err) { next(err); }
+};
+
+exports.createMembership = async (req, res, next) => {
+  try {
+    const membership = await Membership.create(req.body);
+    res.status(201).json({ success: true, data: membership });
+  } catch (err) { next(err); }
+};
+
+exports.updateMembership = async (req, res, next) => {
+  try {
+    const membership = await Membership.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!membership) return res.status(404).json({ success: false, message: "Membership not found" });
+    res.json({ success: true, data: membership });
+  } catch (err) { next(err); }
+};
+
+exports.deleteMembership = async (req, res, next) => {
+  try {
+    await Membership.findByIdAndDelete(req.params.id);
+    res.json({ success: true, message: "Membership removed" });
   } catch (err) { next(err); }
 };
 
