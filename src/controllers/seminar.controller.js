@@ -46,11 +46,28 @@ exports.getAllRegistrations = async (req, res, next) => {
     const { seminar, attended, page = 1, limit = 50, branchId } = req.query;
     const filter = {};
     const isSuper = ['super_admin', 'super_management'].includes(req.user.role);
+    let targetBranchId = isSuper ? branchId : req.user.branchId;
 
-    if (isSuper) {
-      if (branchId) filter.branchId = branchId;
-    } else if (req.user.branchId) {
-      filter.branchId = req.user.branchId;
+    if (targetBranchId) {
+      const Branch = require('../models/Branch');
+      const mongoose = require('mongoose');
+      let branchDoc = null;
+      if (mongoose.Types.ObjectId.isValid(targetBranchId)) {
+        branchDoc = await Branch.findById(targetBranchId).lean();
+      }
+      if (!branchDoc) {
+        branchDoc = await Branch.findOne({
+          $or: [
+            { slug: targetBranchId },
+            { code: targetBranchId?.toString().toUpperCase() }
+          ]
+        }).lean();
+      }
+      if (branchDoc) {
+        filter.branchId = branchDoc._id;
+      } else if (mongoose.Types.ObjectId.isValid(targetBranchId)) {
+        filter.branchId = targetBranchId;
+      }
     }
 
     if (seminar) filter.seminar = new RegExp(seminar, 'i');

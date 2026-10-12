@@ -12,6 +12,7 @@ const BlogPostSchema = new mongoose.Schema(
     isPublished: { type: Boolean, default: false },
     isFeatured:  { type: Boolean, default: false },
     views:       { type: Number, default: 0 },
+    branchId:    { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', index: true },
   },
   { timestamps: true },
 );

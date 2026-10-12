@@ -94,10 +94,17 @@ const getPayments = async (req, res, next) => {
           { code: targetBranchId?.toString().toUpperCase() }
         ]
       });
-      if (branchDoc) {
-        query.branchId = branchDoc._id;
-      } else if (mongoose.Types.ObjectId.isValid(targetBranchId)) {
-        query.branchId = targetBranchId;
+      const resolvedBranchId = branchDoc ? branchDoc._id : (mongoose.Types.ObjectId.isValid(targetBranchId) ? targetBranchId : null);
+      if (resolvedBranchId) {
+        const Course = require('../models/Course');
+        const branchCourses = await Course.find({
+          $or: [{ branchId: resolvedBranchId }, { availableBranches: resolvedBranchId }]
+        }).distinct('_id');
+
+        query.$or = [
+          { branchId: resolvedBranchId },
+          { course: { $in: branchCourses } }
+        ];
       }
     }
 

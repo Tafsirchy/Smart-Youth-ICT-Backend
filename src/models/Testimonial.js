@@ -44,6 +44,11 @@ const TestimonialSchema = new mongoose.Schema(
       default: false,
       index: true,
     },
+    branchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Branch",
+      index: true,
+    },
   },
   { timestamps: true },
 );

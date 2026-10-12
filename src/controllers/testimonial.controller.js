@@ -12,9 +12,41 @@ const buildStatusFilter = (status) => {
 // @access  Public
 exports.getTestimonials = async (req, res, next) => {
   try {
-    const { courseId, limit = 12, status } = req.query;
+    const { courseId, limit = 12, status, branchId } = req.query;
     const filter = buildStatusFilter(status);
     if (courseId) filter.course = courseId;
+
+    const isSuper = req.user && ['super_admin', 'super_management'].includes(req.user.role);
+    const targetBranch = isSuper ? branchId : (req.user?.branchId || branchId);
+
+    if (targetBranch) {
+      const Branch = require('../models/Branch');
+      const Course = require('../models/Course');
+      const mongoose = require('mongoose');
+      let branchDoc = null;
+      if (mongoose.Types.ObjectId.isValid(targetBranch)) {
+        branchDoc = await Branch.findById(targetBranch).lean();
+      }
+      if (!branchDoc) {
+        branchDoc = await Branch.findOne({
+          $or: [
+            { slug: targetBranch },
+            { code: targetBranch?.toString().toUpperCase() }
+          ]
+        }).lean();
+      }
+      const resolvedBranchId = branchDoc ? branchDoc._id : (mongoose.Types.ObjectId.isValid(targetBranch) ? targetBranch : null);
+      if (resolvedBranchId) {
+        const branchCourses = await Course.find({
+          $or: [{ branchId: resolvedBranchId }, { availableBranches: resolvedBranchId }]
+        }).distinct('_id');
+
+        filter.$or = [
+          { branchId: resolvedBranchId },
+          { course: { $in: branchCourses } }
+        ];
+      }
+    }
 
     const testimonials = await Testimonial.find(filter)
       .populate("user", "name avatar")

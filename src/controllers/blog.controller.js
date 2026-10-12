@@ -30,7 +30,7 @@ async function generateUniqueSlug(title, existingId = null) {
  */
 const getAllPosts = async (req, res, next) => {
   try {
-    const { page = 1, limit = 9, tag, q } = req.query;
+    const { page = 1, limit = 9, tag, q, branchId } = req.query;
     const isAdmin = req.user && ['super_admin', 'super_management', 'branch_admin'].includes(req.user.role);
 
     const filter = {};
@@ -43,6 +43,30 @@ const getAllPosts = async (req, res, next) => {
     }
     if (req.query.isFeatured === 'true') {
       filter.isFeatured = true;
+    }
+
+    const isSuper = req.user && ['super_admin', 'super_management'].includes(req.user.role);
+    const targetBranch = isSuper ? branchId : (req.user?.branchId || branchId);
+
+    if (targetBranch) {
+      const Branch = require('../models/Branch');
+      const mongoose = require('mongoose');
+      let branchDoc = null;
+      if (mongoose.Types.ObjectId.isValid(targetBranch)) {
+        branchDoc = await Branch.findById(targetBranch).lean();
+      }
+      if (!branchDoc) {
+        branchDoc = await Branch.findOne({
+          $or: [
+            { slug: targetBranch },
+            { code: targetBranch?.toString().toUpperCase() }
+          ]
+        }).lean();
+      }
+      const resolvedBranchId = branchDoc ? branchDoc._id : (mongoose.Types.ObjectId.isValid(targetBranch) ? targetBranch : null);
+      if (resolvedBranchId) {
+        filter.$or = [{ branchId: resolvedBranchId }, { branchId: null }];
+      }
     }
 
     const total = await BlogPost.countDocuments(filter);
@@ -108,6 +132,23 @@ const createPost = async (req, res, next) => {
       }
     });
 
+    const isSuper = req.user && ['super_admin', 'super_management'].includes(req.user.role);
+    let postBranchId = req.body.branchId || (!isSuper ? req.user.branchId : null);
+    if (postBranchId) {
+      const Branch = require('../models/Branch');
+      const mongoose = require('mongoose');
+      let bDoc = null;
+      if (mongoose.Types.ObjectId.isValid(postBranchId)) {
+        bDoc = await Branch.findById(postBranchId).lean();
+      }
+      if (!bDoc) {
+        bDoc = await Branch.findOne({
+          $or: [{ slug: postBranchId }, { code: postBranchId?.toString().toUpperCase() }]
+        }).lean();
+      }
+      if (bDoc) postBranchId = bDoc._id;
+    }
+
     const post = await BlogPost.create({
       title,
       slug,
@@ -118,6 +159,7 @@ const createPost = async (req, res, next) => {
       isPublished: isPublished || false,
       isFeatured: isFeatured || false,
       author: req.user._id,
+      branchId: postBranchId || null,
     });
 
     res.status(201).json({ success: true, data: post });

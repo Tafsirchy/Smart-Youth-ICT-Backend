@@ -38,26 +38,70 @@ exports.getAllUsers = async (req, res, next) => {
     const filter = {};
     if (role) filter.role = role;
     
-    // 🛡️ Security Fix: Enforce Branch Isolation (IDOR Mitigation)
+    // 🛡️ Security Fix: Enforce Branch Isolation (IDOR Mitigation & Super Admin inspection)
+    let targetBranchId = branchId;
     if (['branch_admin', 'branch_management'].includes(req.user.role)) {
       const { getAllowedBranches } = require('../utils/branchHelper');
       const allowedBranches = getAllowedBranches(req.user);
       
       if (branchId && allowedBranches.includes(branchId.toString())) {
-        filter.branchId = branchId;
+        targetBranchId = branchId;
       } else {
-        filter.branchId = { $in: allowedBranches };
+        targetBranchId = allowedBranches;
       }
-    } else if (branchId) {
-      filter.branchId = branchId;
     }
+
+    if (targetBranchId) {
+      const Branch = require('../models/Branch');
+      const mongoose = require('mongoose');
+      
+      if (Array.isArray(targetBranchId)) {
+        filter.branchId = { $in: targetBranchId };
+      } else {
+        let branchDoc = null;
+        if (mongoose.Types.ObjectId.isValid(targetBranchId)) {
+          branchDoc = await Branch.findById(targetBranchId).lean();
+        }
+        if (!branchDoc) {
+          branchDoc = await Branch.findOne({
+            $or: [
+              { slug: targetBranchId },
+              { code: targetBranchId?.toString().toUpperCase() }
+            ]
+          }).lean();
+        }
+
+        const resolvedBranchId = branchDoc ? branchDoc._id : (mongoose.Types.ObjectId.isValid(targetBranchId) ? targetBranchId : null);
+
+        if (resolvedBranchId) {
+          const Enrollment = require('../models/Enrollment');
+          const enrolledUserIds = await Enrollment.find({ branchId: resolvedBranchId }).distinct('user');
+
+          filter.$or = [
+            { branchId: resolvedBranchId },
+            { secondaryBranches: resolvedBranchId },
+            { _id: { $in: enrolledUserIds } }
+          ];
+        } else {
+          filter.branchId = targetBranchId;
+        }
+      }
+    }
+
     if (q) {
       // 🛡️ Security Fix: Escape regex special characters to prevent NoSQL injection
       const escapedQ = String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      filter.$or = [
+      const searchConditions = [
         { name: { $regex: escapedQ, $options: 'i' } },
         { email: { $regex: escapedQ, $options: 'i' } }
       ];
+
+      if (filter.$or) {
+        filter.$and = [{ $or: filter.$or }, { $or: searchConditions }];
+        delete filter.$or;
+      } else {
+        filter.$or = searchConditions;
+      }
     }
 
     const limitNum = Number(limit) || 20;

@@ -71,21 +71,41 @@ const getCourses = async (req, res, next) => {
     };
 
     // Multi-tenant filtering
+    let targetBranchId = branchId;
+    if (branchId) {
+      const Branch = require('../models/Branch');
+      let branchDoc = null;
+      if (mongoose.Types.ObjectId.isValid(branchId)) {
+        branchDoc = await Branch.findById(branchId).lean();
+      }
+      if (!branchDoc) {
+        branchDoc = await Branch.findOne({
+          $or: [
+            { slug: branchId },
+            { code: branchId?.toString().toUpperCase() }
+          ]
+        }).lean();
+      }
+      if (branchDoc) {
+        targetBranchId = branchDoc._id;
+      }
+    }
+
     if (isBranchStaff) {
       const { getAllowedBranches } = require("../utils/branchHelper");
       const allowedBranches = getAllowedBranches(req.user);
       
       if (includeUnpublished === "true") {
-        if (branchId && allowedBranches.includes(String(branchId))) {
-          filter.$or = buildBranchFilter(branchId);
+        if (targetBranchId && allowedBranches.includes(String(targetBranchId))) {
+          filter.$or = buildBranchFilter(targetBranchId);
         } else {
           filter.$or = buildAllowedBranchesFilter(allowedBranches);
         }
-      } else if (branchId) {
-        filter.$or = buildBranchFilter(branchId);
+      } else if (targetBranchId) {
+        filter.$or = buildBranchFilter(targetBranchId);
       }
-    } else if (branchId) {
-      filter.$or = buildBranchFilter(branchId);
+    } else if (targetBranchId) {
+      filter.$or = buildBranchFilter(targetBranchId);
     }
 
     if (includeUnpublished === "true" && isStaff) {
