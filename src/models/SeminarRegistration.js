@@ -8,6 +8,7 @@ const SeminarSchema = new mongoose.Schema(
     source:   String,
     seminar:  String,  // Seminar name/date
     attended: { type: Boolean, default: false },
+    branchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', index: true },
   },
   { timestamps: true },
 );
