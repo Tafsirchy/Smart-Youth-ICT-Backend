@@ -1,16 +1,21 @@
 const LeadCRM = require('../models/LeadCRM');
+const { isBranchAuthorized } = require('../middleware/rbac.middleware');
 
 /**
  * @desc  Get all leads (paginated + filterable)
  * @route GET /api/crm
- * @access Private (Admin)
+ * @access Private (Admin / Employee with leads:view)
  */
 const getLeads = async (req, res, next) => {
   try {
-    const { page = 1, limit = 20, status, source, q } = req.query;
+    const { page = 1, limit = 20, status, source, q, branchId } = req.query;
 
     const filter = {};
-    if (req.user.role !== 'super_admin') {
+    const isSuper = ['super_admin', 'super_management'].includes(req.user.role);
+
+    if (isSuper) {
+      if (branchId) filter.branchId = branchId;
+    } else {
       filter.branchId = req.user.branchId;
     }
 
@@ -24,7 +29,7 @@ const getLeads = async (req, res, next) => {
 
     const total = await LeadCRM.countDocuments(filter);
     const leads = await LeadCRM.find(filter)
-      .populate('assignedTo', 'name')
+      .populate('assignedTo', 'name email')
       .sort('-createdAt')
       .skip((page - 1) * limit)
       .limit(Number(limit));
@@ -38,15 +43,15 @@ const getLeads = async (req, res, next) => {
 /**
  * @desc  Get a single lead
  * @route GET /api/crm/:id
- * @access Private (Admin)
+ * @access Private (Admin / Employee with leads:view)
  */
 const getLeadById = async (req, res, next) => {
   try {
-    const lead = await LeadCRM.findById(req.params.id).populate('assignedTo', 'name');
+    const lead = await LeadCRM.findById(req.params.id).populate('assignedTo', 'name email');
     if (!lead) return res.status(404).json({ success: false, message: 'Lead not found' });
 
     // Isolation check
-    if (req.user.role !== 'super_admin' && lead.branchId?.toString() !== req.user.branchId?.toString()) {
+    if (!isBranchAuthorized(req, lead.branchId)) {
       return res.status(403).json({ success: false, message: 'Unauthorized branch access' });
     }
 
@@ -59,15 +64,16 @@ const getLeadById = async (req, res, next) => {
 /**
  * @desc  Create a new lead
  * @route POST /api/crm
- * @access Private (Admin)
+ * @access Private (Admin / Employee with leads:manage)
  */
 const createLead = async (req, res, next) => {
   try {
     const { name, phone, email, source, interest, status, followUpDate, assignedTo } = req.body;
-    const branchId = req.user.branchId;
+    const isSuper = ['super_admin', 'super_management'].includes(req.user.role);
+    const branchId = isSuper ? (req.body.branchId || req.user.branchId) : req.user.branchId;
 
-    if (!branchId && req.user.role !== 'super_admin') {
-      return res.status(400).json({ success: false, message: 'Branch ID required' });
+    if (!branchId) {
+      return res.status(400).json({ success: false, message: 'Branch ID context is required' });
     }
 
     const lead = await LeadCRM.create({
@@ -82,22 +88,27 @@ const createLead = async (req, res, next) => {
 /**
  * @desc  Update a lead (status, followUpDate, assignedTo, interest, etc.)
  * @route PUT /api/crm/:id
- * @access Private (Admin)
+ * @access Private (Admin / Employee with leads:manage)
  */
 const updateLead = async (req, res, next) => {
   try {
     let lead = await LeadCRM.findById(req.params.id);
     if (!lead) return res.status(404).json({ success: false, message: 'Lead not found' });
 
-    if (req.user.role !== 'super_admin' && lead.branchId?.toString() !== req.user.branchId?.toString()) {
-        return res.status(403).json({ success: false, message: 'Unauthorized branch access' });
+    if (!isBranchAuthorized(req, lead.branchId)) {
+      return res.status(403).json({ success: false, message: 'Unauthorized branch access' });
     }
+
+    // Prevent changing branchId via update to stop cross-branch transfer IDOR
+    const updates = { ...req.body };
+    delete updates.branchId;
 
     lead = await LeadCRM.findByIdAndUpdate(
       req.params.id,
-      { $set: req.body },
+      { $set: updates },
       { new: true, runValidators: true }
-    ).populate('assignedTo', 'name');
+    ).populate('assignedTo', 'name email');
+
     res.json({ success: true, data: lead });
   } catch (err) {
     next(err);
@@ -107,19 +118,25 @@ const updateLead = async (req, res, next) => {
 /**
  * @desc  Add a note to a lead
  * @route PATCH /api/crm/:id/note
- * @access Private (Admin)
+ * @access Private (Admin / Employee with leads:manage)
  */
 const addNote = async (req, res, next) => {
   try {
     const { text } = req.body;
     if (!text) return res.status(400).json({ success: false, message: 'Note text is required' });
 
-    const lead = await LeadCRM.findByIdAndUpdate(
-      req.params.id,
-      { $push: { notes: { text, createdAt: new Date() } } },
-      { new: true }
-    );
+    const lead = await LeadCRM.findById(req.params.id);
     if (!lead) return res.status(404).json({ success: false, message: 'Lead not found' });
+
+    // Isolation check
+    if (!isBranchAuthorized(req, lead.branchId)) {
+      return res.status(403).json({ success: false, message: 'Unauthorized branch access' });
+    }
+
+    lead.notes = lead.notes || [];
+    lead.notes.push({ text, createdAt: new Date() });
+    await lead.save();
+
     res.json({ success: true, data: lead.notes });
   } catch (err) {
     next(err);
@@ -129,13 +146,20 @@ const addNote = async (req, res, next) => {
 /**
  * @desc  Delete a lead
  * @route DELETE /api/crm/:id
- * @access Private (Admin)
+ * @access Private (Admin / Employee with leads:delete)
  */
 const deleteLead = async (req, res, next) => {
   try {
-    const lead = await LeadCRM.findByIdAndDelete(req.params.id);
+    const lead = await LeadCRM.findById(req.params.id);
     if (!lead) return res.status(404).json({ success: false, message: 'Lead not found' });
-    res.json({ success: true, message: 'Lead deleted' });
+
+    // Isolation check
+    if (!isBranchAuthorized(req, lead.branchId)) {
+      return res.status(403).json({ success: false, message: 'Unauthorized branch access' });
+    }
+
+    await LeadCRM.findByIdAndDelete(req.params.id);
+    res.json({ success: true, message: 'Lead deleted successfully' });
   } catch (err) {
     next(err);
   }
@@ -144,13 +168,19 @@ const deleteLead = async (req, res, next) => {
 /**
  * @desc  Get CRM summary stats
  * @route GET /api/crm/stats
- * @access Private (Admin)
+ * @access Private (Admin / Employee with leads:view)
  */
 const getCRMStats = async (req, res, next) => {
   try {
     const statuses = ['new', 'contacted', 'interested', 'enrolled', 'cold', 'lost'];
     const filter = {};
-    if (req.user.role !== 'super_admin') filter.branchId = req.user.branchId;
+    const isSuper = ['super_admin', 'super_management'].includes(req.user.role);
+
+    if (isSuper) {
+      if (req.query.branchId) filter.branchId = req.query.branchId;
+    } else {
+      filter.branchId = req.user.branchId;
+    }
 
     const statsArr = await LeadCRM.aggregate([
       { $match: filter },
@@ -159,7 +189,7 @@ const getCRMStats = async (req, res, next) => {
     const stats = {};
     statuses.forEach(s => { stats[s] = 0; });
     statsArr.forEach(s => { stats[s._id] = s.count; });
-    stats.total = await LeadCRM.countDocuments();
+    stats.total = await LeadCRM.countDocuments(filter);
     res.json({ success: true, data: stats });
   } catch (err) {
     next(err);
