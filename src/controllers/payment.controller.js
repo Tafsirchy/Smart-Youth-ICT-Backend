@@ -81,9 +81,10 @@ const getPayments = async (req, res, next) => {
     const query = {};
 
     if (status) query.status = status;
-    if (branchId) query.branchId = branchId;
-    // Branch admins should only see their branch's payments
-    if (['branch_admin', 'branch_management'].includes(req.user.role)) {
+    const isSuper = ['super_admin', 'super_management'].includes(req.user.role);
+    if (isSuper) {
+      if (branchId) query.branchId = branchId;
+    } else {
       query.branchId = req.user.branchId;
     }
 
