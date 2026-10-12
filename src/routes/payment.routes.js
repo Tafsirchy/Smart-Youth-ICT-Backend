@@ -1,9 +1,11 @@
 const express = require('express');
 const router  = express.Router();
-const { protect }   = require('../middleware/auth.middleware');
-const { authorize, authorizeBranch } = require('../middleware/role.middleware');
-const Payment      = require('../models/Payment');
-const Enrollment   = require('../models/Enrollment');
+const { protect } = require('../middleware/auth.middleware');
+const { requireAccess, isBranchAuthorized } = require('../middleware/rbac.middleware');
+const { PERMISSIONS } = require('../config/permissions');
+const Payment    = require('../models/Payment');
+const Enrollment = require('../models/Enrollment');
+const Course     = require('../models/Course');
 const { 
   initializeCheckout, 
   stripeWebhook, 
@@ -16,7 +18,7 @@ const {
 // Checkout Routing
 // ─────────────────────────────────────────────────────────
 router.post('/checkout', protect, initializeCheckout);
-router.get('/', protect, authorize('super_admin', 'branch_admin'), require('../controllers/payment.controller').getPayments);
+router.get('/', protect, requireAccess(PERMISSIONS.PAYMENTS_VIEW, PERMISSIONS.PAYMENTS_VERIFY), getPayments);
 
 // ─────────────────────────────────────────────────────────
 // Manual Payments (Bank, bKash, Nagad, Rocket)
@@ -39,9 +41,17 @@ router.post('/manual/submit', protect, async (req, res, next) => {
       return res.status(409).json({ message: 'A payment record already exists for this course' });
     }
 
+    // Determine branch context
+    let targetBranchId = req.body.branchId || req.user.branchId;
+    if (!targetBranchId && courseId) {
+      const course = await Course.findById(courseId);
+      if (course && course.branchId) targetBranchId = course.branchId;
+    }
+
     const payment = await Payment.create({
       user: req.user._id, 
       course: courseId,
+      branchId: targetBranchId || undefined,
       method: method || 'bank', 
       amount: Number(amount),
       transactionId,
@@ -56,8 +66,6 @@ router.post('/manual/submit', protect, async (req, res, next) => {
 // ─────────────────────────────────────────────────────────
 // Webhooks (Must bypass JSON body parser if using Stripe raw body, handled in server.js)
 // ─────────────────────────────────────────────────────────
-// NOTE: For Stripe, the route in server.js should be configured to use express.raw() 
-// before it reaches this router.
 router.post('/webhook/stripe', express.raw({ type: 'application/json' }), stripeWebhook);
 router.get('/callback/bkash', bkashCallback);
 router.get('/callback/nagad', nagadCallback);
@@ -73,9 +81,9 @@ router.get('/history', protect, async (req, res, next) => {
 });
 
 // ─────────────────────────────────────────────────────────
-// Admin Verification & Rejection
+// Admin Verification & Rejection (Guarded by RBAC and Branch Isolation)
 // ─────────────────────────────────────────────────────────
-router.put('/:id/verify', protect, authorize('super_admin', 'super_management', 'branch_admin', 'branch_management'), authorizeBranch, async (req, res, next) => {
+router.put('/:id/verify', protect, requireAccess(PERMISSIONS.PAYMENTS_VERIFY), async (req, res, next) => {
   try {
     const { status, note } = req.body; // status should be 'completed' or 'failed'
     
@@ -83,18 +91,25 @@ router.put('/:id/verify', protect, authorize('super_admin', 'super_management', 
       return res.status(400).json({ message: 'Invalid status for verification' });
     }
 
-    const payment = await Payment.findByIdAndUpdate(
-      req.params.id,
-      { status, verifiedBy: req.user._id, verifiedAt: new Date(), adminNote: note },
-      { new: true },
-    );
+    const payment = await Payment.findById(req.params.id);
     if (!payment) return res.status(404).json({ message: 'Payment not found' });
+
+    // Strict Tenant Isolation Check
+    if (!isBranchAuthorized(req, payment.branchId)) {
+      return res.status(403).json({ message: 'Access denied: Payment belongs to another branch' });
+    }
+
+    payment.status = status;
+    payment.verifiedBy = req.user._id;
+    payment.verifiedAt = new Date();
+    payment.adminNote = note;
+    await payment.save();
     
     if (status === 'completed') {
       // Activate enrollment
       await Enrollment.findOneAndUpdate(
         { user: payment.user, course: payment.course },
-        { paymentStatus: 'paid' },
+        { paymentStatus: 'paid', branchId: payment.branchId },
         { upsert: true, new: true },
       );
     } else if (status === 'failed') {
