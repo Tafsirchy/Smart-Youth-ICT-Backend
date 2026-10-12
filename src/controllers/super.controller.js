@@ -505,7 +505,7 @@ exports.toggleBranchStatus = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// @desc    Soft delete a branch
+// @desc    Hard delete a branch (Super Admin only)
 // @route   DELETE /api/super/branches/:id
 // @access  Private (Super Admin)
 exports.deleteBranch = async (req, res, next) => {
@@ -513,13 +513,41 @@ exports.deleteBranch = async (req, res, next) => {
     const branch = await Branch.findById(req.params.id);
     if (!branch) return res.status(404).json({ success: false, message: 'Branch not found' });
 
-    branch.isActive = false;
-    await branch.save();
+    const branchId = branch._id;
+    const branchName = branch.name;
+
+    // Cascade: remove branch reference from users (don't delete the users themselves)
+    const User = require('../models/User');
+    await User.updateMany(
+      { branchId },
+      { $unset: { branchId: '' }, $pull: { secondaryBranches: branchId } }
+    );
+
+    // Cascade: remove branchId from enrollments (keep enrollment records)
+    const Enrollment = require('../models/Enrollment');
+    await Enrollment.updateMany({ branchId }, { $unset: { branchId: '' } });
+
+    // Cascade: unset branchId from courses owned by this branch
+    const Course = require('../models/Course');
+    await Course.updateMany({ branchId }, { $unset: { branchId: '' } });
+    await Course.updateMany(
+      { availableBranches: branchId },
+      { $pull: { availableBranches: branchId } }
+    );
+
+    // Hard delete the branch
+    await Branch.findByIdAndDelete(branchId);
 
     // Log action
-    await AuditLog.create({ actor: req.user._id, action: 'DEACTIVATE_BRANCH', entity: 'Branch', entityId: branch._id });
+    await AuditLog.create({
+      actor: req.user._id,
+      action: 'DELETE_BRANCH',
+      entity: 'Branch',
+      entityId: branchId,
+      metadata: { name: branchName }
+    });
 
-    res.json({ success: true, message: 'Branch deactivated' });
+    res.json({ success: true, message: `Branch "${branchName}" permanently deleted.` });
   } catch (err) { next(err); }
 };
 
