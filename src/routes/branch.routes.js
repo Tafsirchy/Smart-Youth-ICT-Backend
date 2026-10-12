@@ -7,7 +7,7 @@ const {
   createBranchInquiry
 } = require('../controllers/branch.controller');
 const { protect } = require('../middleware/auth.middleware');
-const { authorize, authorizeBranch } = require('../middleware/role.middleware');
+const { requireAccess } = require('../middleware/rbac.middleware');
 
 const router = express.Router({ mergeParams: true });
 
@@ -18,8 +18,7 @@ router.get('/public/:slugOrId', getPublicBranchBySlug);
 router.post('/public/:branchId/inquiry', createBranchInquiry);
 
 router.use(protect);
-router.use(authorize('super_admin', 'super_management', 'branch_admin', 'branch_management'));
-router.use(authorizeBranch);
+router.use(requireAccess());
 
 router.get('/stats', getBranchStats);
 
