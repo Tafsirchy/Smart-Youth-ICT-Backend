@@ -8,6 +8,11 @@ const AuditLogSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    branchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Branch',
+      index: true,
+    },
     action: {
       type: String,
       required: true,
