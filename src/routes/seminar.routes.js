@@ -1,7 +1,8 @@
 const express = require('express');
 const router  = express.Router();
 const { protect } = require('../middleware/auth.middleware');
-const { authorize } = require('../middleware/role.middleware');
+const { requireAccess } = require('../middleware/rbac.middleware');
+const { PERMISSIONS } = require('../config/permissions');
 const {
   registerForSeminar,
   getAllRegistrations,
@@ -12,10 +13,9 @@ const {
 router.post('/register', registerForSeminar);
 
 // Admin / Staff — view registrations and mark attendance
-const staffRoles = authorize('admin', 'branch_admin', 'super_admin', 'branch_management', 'super_management');
-router.get('/',                  protect, staffRoles, getAllRegistrations);
-router.get('/registrations',     protect, staffRoles, getAllRegistrations);
-router.patch('/:id/attend',      protect, staffRoles, markAttended);
-router.patch('/registrations/:id', protect, staffRoles, markAttended);
+router.get('/',                    protect, requireAccess(PERMISSIONS.SEMINARS_VIEW, PERMISSIONS.SEMINARS_MANAGE), getAllRegistrations);
+router.get('/registrations',       protect, requireAccess(PERMISSIONS.SEMINARS_VIEW, PERMISSIONS.SEMINARS_MANAGE), getAllRegistrations);
+router.patch('/:id/attend',        protect, requireAccess(PERMISSIONS.SEMINARS_MANAGE), markAttended);
+router.patch('/registrations/:id', protect, requireAccess(PERMISSIONS.SEMINARS_MANAGE), markAttended);
 
 module.exports = router;
