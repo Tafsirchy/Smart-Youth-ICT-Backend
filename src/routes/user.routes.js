@@ -16,7 +16,13 @@ const {
   updateUserRole,
   getPublicInstructors,
   inviteStaff,
-  acceptInvite
+  acceptInvite,
+  getPermissionsCatalog,
+  getBranchStaff,
+  createBranchStaff,
+  updateStaffPermissions,
+  toggleBranchStaffStatus,
+  deleteBranchStaff,
 } = require('../controllers/user.controller');
 
 // Public listing
@@ -29,19 +35,33 @@ router.post('/invite/accept', authLimiter, acceptInviteValidation, handleValidat
 router.get('/me',           protect, getMyProfile);
 router.put('/me',           protect, updateMyProfile);
 
-// Admin / Management only
+// Admin / Management roles
 const superRoles = ['super_admin', 'super_management'];
-const adminRoles = [...superRoles, 'branch_admin', 'branch_management'];
+const branchManagerRoles = ['branch_admin', 'branch_management'];
+const allManagerRoles = [...superRoles, ...branchManagerRoles];
 
-router.get('/',             protect, authorize(...adminRoles), getAllUsers);
+// ─────────────────────────────────────────────────────────────
+// Branch Staff Delegation (Branch Managers & Super Admins)
+// ─────────────────────────────────────────────────────────────
+router.get('/permissions/catalog',           protect, authorize(...allManagerRoles), getPermissionsCatalog);
+router.get('/branch/staff',                  protect, authorize(...allManagerRoles), getBranchStaff);
+router.post('/branch/staff',                 protect, authorize(...allManagerRoles), createBranchStaff);
+router.put('/branch/staff/:id/permissions',  protect, authorize(...allManagerRoles), updateStaffPermissions);
+router.patch('/branch/staff/:id/status',     protect, authorize(...allManagerRoles), toggleBranchStaffStatus);
+router.delete('/branch/staff/:id',           protect, authorize(...allManagerRoles), deleteBranchStaff);
+
+// ─────────────────────────────────────────────────────────────
+// General User Management (Super Admin & Admins)
+// ─────────────────────────────────────────────────────────────
+router.get('/',             protect, authorize(...allManagerRoles), getAllUsers);
 router.post('/',            protect, authorize(...superRoles), adminCreateUser);
 router.post('/invite',      protect, emailLimiter, authorize(...superRoles), inviteStaff);
 
-router.get('/:id',          protect, authorize(...adminRoles), getUserById);
-router.put('/:id',          protect, authorize(...adminRoles), adminUpdateUser);
+router.get('/:id',          protect, authorize(...allManagerRoles), getUserById);
+router.put('/:id',          protect, authorize(...allManagerRoles), adminUpdateUser);
 router.delete('/:id',       protect, authorize(...superRoles), adminDeleteUser);
 
-router.patch('/:id/status', protect, authorize(...adminRoles), toggleUserStatus);
+router.patch('/:id/status', protect, authorize(...allManagerRoles), toggleUserStatus);
 router.put('/:id/role',     protect, authorize(...superRoles), updateUserRole);
 
 module.exports = router;
