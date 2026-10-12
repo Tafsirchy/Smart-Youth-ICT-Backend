@@ -2,23 +2,26 @@ const Enrollment = require('../models/Enrollment');
 const User = require('../models/User');
 const Course = require('../models/Course');
 const emailService = require('../services/email.service');
+const { isBranchAuthorized } = require('../middleware/rbac.middleware');
 
-// @desc    Get all enrollments (Admin/Management only, branch-aware)
+// @desc    Get all enrollments (Admin/Management/Employee, branch-aware)
 // @route   GET /api/enrollments
-// @access  Private (Branch Admin/Management)
+// @access  Private
 exports.getEnrollments = async (req, res, next) => {
   try {
-    const branchId = req.user.branchId || req.query.branchId;
-    const filter   = {};
+    const isSuper = ['super_admin', 'super_management'].includes(req.user.role);
+    const filter = {};
 
-    if (req.user.role !== 'super_admin') {
-      if (!branchId) return res.status(403).json({ success: false, message: 'Branch ID required for this role.' });
-      filter.branchId = branchId;
+    if (isSuper) {
+      if (req.query.branchId) filter.branchId = req.query.branchId;
+    } else {
+      if (!req.user.branchId) return res.status(403).json({ success: false, message: 'Branch ID required for this role.' });
+      filter.branchId = req.user.branchId;
     }
 
     const enrollments = await Enrollment.find(filter)
-      .populate('user', 'name email image')
-      .populate('course', 'title price')
+      .populate('user', 'name email image avatar')
+      .populate('course', 'title price thumbnail')
       .sort(req.query.sort || '-createdAt')
       .limit(parseInt(req.query.limit) || 50);
 
@@ -38,18 +41,18 @@ exports.getEnrollments = async (req, res, next) => {
 exports.getEnrollment = async (req, res, next) => {
   try {
     const enrollment = await Enrollment.findById(req.params.id)
-      .populate('user', 'name email')
-      .populate('course', 'title');
+      .populate('user', 'name email avatar')
+      .populate('course', 'title price');
 
     if (!enrollment) return res.status(404).json({ success: false, message: 'Enrollment not found' });
 
-    // 🛡️ Security Fix: Prevent IDOR (Students must only see their own enrollments)
+    // Students must only see their own enrollments
     if (req.user.role === 'student' && enrollment.user?._id?.toString() !== req.user._id.toString()) {
-        return res.status(403).json({ success: false, message: 'Access denied: You can only view your own enrollment details.' });
+      return res.status(403).json({ success: false, message: 'Access denied: You can only view your own enrollment details.' });
     }
 
-    // Branch isolation check for admins
-    if (['admin', 'branch_admin', 'branch_management'].includes(req.user.role) && enrollment.branchId?.toString() !== req.user.branchId?.toString()) {
+    // Branch isolation check for staff
+    if (req.user.role !== 'student' && !isBranchAuthorized(req, enrollment.branchId)) {
       return res.status(403).json({ success: false, message: 'Unauthorized access to this branch data.' });
     }
 
@@ -61,17 +64,17 @@ exports.getEnrollment = async (req, res, next) => {
 
 // @desc    Create enrollment (Admin manual)
 // @route   POST /api/enrollments
-// @access  Private (Admin)
+// @access  Private (Staff with students:enroll)
 exports.createEnrollment = async (req, res, next) => {
   try {
     const { userId, courseId, branchId } = req.body;
-    const targetBranch = branchId || req.user.branchId;
+    const isSuper = ['super_admin', 'super_management'].includes(req.user.role);
+    const targetBranch = isSuper ? (branchId || req.user.branchId) : req.user.branchId;
 
     if (!userId || !courseId || !targetBranch) {
-        return res.status(400).json({ success: false, message: 'UserID, CourseID and BranchID are required.' });
+      return res.status(400).json({ success: false, message: 'UserID, CourseID and BranchID are required.' });
     }
 
-    // 🛡️ Security Fix: Avoid Mass Assignment
     const enrollment = await Enrollment.create({
       user: userId,
       course: courseId,
@@ -79,7 +82,7 @@ exports.createEnrollment = async (req, res, next) => {
       paymentStatus: req.body.paymentStatus || 'paid' 
     });
 
-    // 📧 Notify Student
+    // Notify Student
     try {
       const [user, course] = await Promise.all([
         User.findById(userId),
@@ -103,7 +106,7 @@ exports.createEnrollment = async (req, res, next) => {
 exports.getMyEnrollments = async (req, res, next) => {
   try {
     const enrollments = await Enrollment.find({ user: req.user._id })
-      .populate('course', 'title price category')
+      .populate('course', 'title price category thumbnail')
       .sort('-createdAt');
 
     res.json({
@@ -115,4 +118,3 @@ exports.getMyEnrollments = async (req, res, next) => {
     next(err);
   }
 };
-
