@@ -280,7 +280,12 @@ exports.acceptInvite = async (req, res, next) => {
 exports.adminUpdateUser = async (req, res, next) => {
   try {
     const { name, email, role, branchId, phone, isActive } = req.body;
-    
+
+    // Normalize empty branch selection ("") to null so it maps to "Global" instead of
+    // failing the ObjectId cast on the branchId path.
+    const normalizedBranchId =
+      branchId === undefined ? undefined : (branchId === '' || branchId === null ? null : branchId);
+
     // Authorization check: Only Super Admins can change roles or move branches
     const isSuper = ['super_admin', 'super_management'].includes(req.user.role);
     
@@ -315,9 +320,9 @@ exports.adminUpdateUser = async (req, res, next) => {
 
       user.role = role;
       user.tokenVersion = (user.tokenVersion || 0) + 1; // Invalidate all existing sessions on role change
-      if (branchId !== undefined) user.branchId = branchId;
-    } else if (isSuper && branchId !== undefined) {
-      user.branchId = branchId;
+      if (normalizedBranchId !== undefined) user.branchId = normalizedBranchId;
+    } else if (isSuper && normalizedBranchId !== undefined) {
+      user.branchId = normalizedBranchId;
     }
 
     await user.save();
