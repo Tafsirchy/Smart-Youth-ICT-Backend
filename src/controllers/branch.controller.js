@@ -5,7 +5,8 @@ const Payment = require('../models/Payment');
 
 exports.getBranchStats = async (req, res, next) => {
   try {
-    const branchId = req.params.branchId || req.user.branchId;
+    const isSuper = ['super_admin', 'super_management'].includes(req.user.role);
+    const branchId = isSuper ? (req.query.branchId || req.params.branchId || req.user.branchId) : req.user.branchId;
     if (!branchId) return res.status(400).json({ success: false, message: 'Branch context missing' });
 
     const stats = await User.aggregate([
