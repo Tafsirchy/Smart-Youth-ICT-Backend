@@ -82,10 +82,23 @@ const getPayments = async (req, res, next) => {
 
     if (status) query.status = status;
     const isSuper = ['super_admin', 'super_management'].includes(req.user.role);
-    if (isSuper) {
-      if (branchId) query.branchId = branchId;
-    } else {
-      query.branchId = req.user.branchId;
+    let targetBranchId = isSuper ? branchId : req.user.branchId;
+
+    if (targetBranchId) {
+      const Branch = require('../models/Branch');
+      const mongoose = require('mongoose');
+      const branchDoc = await Branch.findOne({
+        $or: [
+          ...(mongoose.Types.ObjectId.isValid(targetBranchId) ? [{ _id: targetBranchId }] : []),
+          { slug: targetBranchId },
+          { code: targetBranchId?.toString().toUpperCase() }
+        ]
+      });
+      if (branchDoc) {
+        query.branchId = branchDoc._id;
+      } else if (mongoose.Types.ObjectId.isValid(targetBranchId)) {
+        query.branchId = targetBranchId;
+      }
     }
 
     const skip = (page - 1) * limit;

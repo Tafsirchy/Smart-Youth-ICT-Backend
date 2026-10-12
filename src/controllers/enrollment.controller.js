@@ -12,11 +12,26 @@ exports.getEnrollments = async (req, res, next) => {
     const isSuper = ['super_admin', 'super_management'].includes(req.user.role);
     const filter = {};
 
-    if (isSuper) {
-      if (req.query.branchId) filter.branchId = req.query.branchId;
-    } else {
-      if (!req.user.branchId) return res.status(403).json({ success: false, message: 'Branch ID required for this role.' });
-      filter.branchId = req.user.branchId;
+    let targetBranchId = isSuper ? req.query.branchId : req.user.branchId;
+    if (!isSuper && !targetBranchId) {
+      return res.status(403).json({ success: false, message: 'Branch ID required for this role.' });
+    }
+
+    if (targetBranchId) {
+      const Branch = require('../models/Branch');
+      const mongoose = require('mongoose');
+      const branchDoc = await Branch.findOne({
+        $or: [
+          ...(mongoose.Types.ObjectId.isValid(targetBranchId) ? [{ _id: targetBranchId }] : []),
+          { slug: targetBranchId },
+          { code: targetBranchId?.toString().toUpperCase() }
+        ]
+      });
+      if (branchDoc) {
+        filter.branchId = branchDoc._id;
+      } else if (mongoose.Types.ObjectId.isValid(targetBranchId)) {
+        filter.branchId = targetBranchId;
+      }
     }
 
     const enrollments = await Enrollment.find(filter)
