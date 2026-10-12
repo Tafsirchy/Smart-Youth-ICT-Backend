@@ -313,9 +313,9 @@ exports.adminUpdateUser = async (req, res, next) => {
         return res.status(403).json({ success: false, message: 'Security Protocol: Self-role reconfiguration is restricted' });
       }
 
-      // Prevent modification of other administrative peers
-      if (administrativeRoles.includes(user.role)) {
-        return res.status(403).json({ success: false, message: 'Security Protocol: Administrative hierarchy nodes cannot be reconfigured by peers' });
+      // Prevent non-super admins from modifying administrative tiers
+      if (['super_admin', 'super_management'].includes(user.role) && req.user.role !== 'super_admin') {
+        return res.status(403).json({ success: false, message: 'Security Protocol: Super Admin tier cannot be reconfigured by peers' });
       }
 
       user.role = role;
@@ -345,6 +345,9 @@ exports.adminDeleteUser = async (req, res, next) => {
     // Note: In a production app, you might want to handle dependent records 
     // like Enrollments, Invoices, etc. (Soft delete is usually preferred).
     
+    const userCache = require('../utils/userCache');
+    userCache.del(req.params.id);
+
     res.json({ success: true, message: 'User permanently removed from system' });
   } catch (err) { next(err); }
 };
@@ -357,7 +360,7 @@ exports.updateUserRole = async (req, res, next) => {
     const { role } = req.body;
     
     // Prevent updating a user to a non-existent role
-    const validRoles = ['student', 'instructor', 'branch_admin', 'branch_management', 'super_admin', 'super_management'];
+    const validRoles = ['student', 'instructor', 'employee', 'branch_admin', 'branch_management', 'super_admin', 'super_management'];
     if (!validRoles.includes(role)) {
       return res.status(400).json({ success: false, message: 'Invalid role provided' });
     }
@@ -371,14 +374,16 @@ exports.updateUserRole = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Security Protocol: Self-role reconfiguration is restricted' });
     }
 
-    const administrativeRoles = ['super_admin', 'super_management', 'admin', 'branch_admin', 'branch_management'];
-    if (administrativeRoles.includes(user.role)) {
-      return res.status(403).json({ success: false, message: 'Security Protocol: Administrative hierarchy nodes cannot be reconfigured by peers' });
+    if (['super_admin', 'super_management'].includes(user.role) && req.user.role !== 'super_admin') {
+      return res.status(403).json({ success: false, message: 'Security Protocol: Super Admin tier cannot be reconfigured by peers' });
     }
 
     user.role = role;
     user.tokenVersion = (user.tokenVersion || 0) + 1; // Invalidate all existing sessions
     await user.save();
+
+    const userCache = require('../utils/userCache');
+    userCache.del(user._id);
     
     // Select fields for response
     const updatedUser = await User.findById(user._id).select('-password -resetToken -resetExpiry');
@@ -428,3 +433,227 @@ exports.getPublicInstructors = async (req, res, next) => {
     });
   } catch (err) { next(err); }
 };
+
+// ============================================================================
+// BRANCH STAFF DELEGATION CONTROLLERS (Branch Manager & Super Admin)
+// ============================================================================
+
+const { PERMISSIONS, PERMISSION_METADATA } = require('../config/permissions');
+const { isBranchAuthorized } = require('../middleware/rbac.middleware');
+
+// @desc    Get permissions registry & catalog for UI selection
+// @route   GET /api/users/permissions/catalog
+// @access  Private (Branch Admin / Super Admin)
+exports.getPermissionsCatalog = async (req, res, next) => {
+  try {
+    res.json({
+      success: true,
+      data: {
+        permissions: PERMISSIONS,
+        catalog: PERMISSION_METADATA,
+      },
+    });
+  } catch (err) { next(err); }
+};
+
+// @desc    Get all staff/employees for caller's branch
+// @route   GET /api/users/branch/staff
+// @access  Private (Branch Admin / Super Admin)
+exports.getBranchStaff = async (req, res, next) => {
+  try {
+    const isSuper = ['super_admin', 'super_management'].includes(req.user.role);
+    const branchId = isSuper ? (req.query.branchId || req.user.branchId) : req.user.branchId;
+
+    if (!branchId) {
+      return res.status(400).json({ success: false, message: 'Branch context is required' });
+    }
+
+    const filter = {
+      branchId,
+      role: { $in: ['employee', 'instructor', 'branch_admin', 'branch_management'] },
+    };
+
+    const staffList = await User.find(filter)
+      .select('name email phone role permissions isActive avatar createdAt assignedBy')
+      .populate('assignedBy', 'name role')
+      .sort('-createdAt')
+      .lean();
+
+    res.json({
+      success: true,
+      count: staffList.length,
+      data: staffList,
+    });
+  } catch (err) { next(err); }
+};
+
+// @desc    Branch Manager creates or onboards an employee with delegated permissions
+// @route   POST /api/users/branch/staff
+// @access  Private (Branch Admin / Super Admin)
+exports.createBranchStaff = async (req, res, next) => {
+  try {
+    const { name, email, password, phone, permissions = [], role = 'employee' } = req.body;
+    const isSuper = ['super_admin', 'super_management'].includes(req.user.role);
+    const branchId = isSuper ? (req.body.branchId || req.user.branchId) : req.user.branchId;
+
+    if (!branchId) {
+      return res.status(400).json({ success: false, message: 'Branch context is required' });
+    }
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ success: false, message: 'Name, email, and password are required' });
+    }
+
+    // Privilege escalation prevention: Branch Manager can only create employees or instructors
+    const allowedRolesToCreate = isSuper
+      ? ['employee', 'instructor', 'branch_admin', 'branch_management']
+      : ['employee', 'instructor'];
+
+    if (!allowedRolesToCreate.includes(role)) {
+      return res.status(403).json({
+        success: false,
+        message: `Forbidden: You cannot assign the role '${role}'. Allowed roles: ${allowedRolesToCreate.join(', ')}`,
+      });
+    }
+
+    // Validate permissions array against known registry
+    const validPerms = Object.values(PERMISSIONS);
+    const sanitizedPermissions = Array.isArray(permissions)
+      ? permissions.filter(p => validPerms.includes(p))
+      : [];
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const existing = await User.findOne({ email: normalizedEmail });
+    if (existing) {
+      return res.status(409).json({ success: false, message: 'Email already registered in system' });
+    }
+
+    const newStaff = await User.create({
+      name: name.trim(),
+      email: normalizedEmail,
+      phone: phone ? phone.trim() : '',
+      password,
+      role,
+      branchId,
+      permissions: role === 'employee' ? sanitizedPermissions : [],
+      assignedBy: req.user._id,
+      isVerified: true,
+      isActive: true,
+      providers: ['credentials'],
+    });
+
+    const responseUser = await User.findById(newStaff._id).select('-password');
+    res.status(201).json({
+      success: true,
+      data: responseUser,
+      message: `Staff member ${name} created successfully with ${sanitizedPermissions.length} delegated permissions.`,
+    });
+  } catch (err) { next(err); }
+};
+
+// @desc    Update employee delegated permissions
+// @route   PUT /api/users/branch/staff/:id/permissions
+// @access  Private (Branch Admin / Super Admin)
+exports.updateStaffPermissions = async (req, res, next) => {
+  try {
+    const { permissions } = req.body;
+    if (!Array.isArray(permissions)) {
+      return res.status(400).json({ success: false, message: 'Permissions must be an array' });
+    }
+
+    const targetUser = await User.findById(req.params.id);
+    if (!targetUser) {
+      return res.status(404).json({ success: false, message: 'Staff member not found' });
+    }
+
+    // Tenant authorization check
+    if (!isBranchAuthorized(req, targetUser.branchId)) {
+      return res.status(403).json({ success: false, message: 'Unauthorized: Staff member belongs to another branch' });
+    }
+
+    // Protection: Cannot alter permissions of super admins or peers
+    if (['super_admin', 'super_management', 'branch_admin'].includes(targetUser.role) && req.user.role !== 'super_admin') {
+      return res.status(403).json({ success: false, message: 'Cannot reconfigure permissions for administrative superiors' });
+    }
+
+    const validPerms = Object.values(PERMISSIONS);
+    targetUser.permissions = permissions.filter(p => validPerms.includes(p));
+    targetUser.tokenVersion = (targetUser.tokenVersion || 0) + 1; // Invalidate active session tokens
+    await targetUser.save();
+
+    const userCache = require('../utils/userCache');
+    userCache.del(targetUser._id);
+
+    res.json({
+      success: true,
+      data: {
+        _id: targetUser._id,
+        name: targetUser.name,
+        role: targetUser.role,
+        permissions: targetUser.permissions,
+      },
+      message: `Permissions updated successfully. ${targetUser.permissions.length} tasks delegated.`,
+    });
+  } catch (err) { next(err); }
+};
+
+// @desc    Toggle active status of a branch staff member
+// @route   PATCH /api/users/branch/staff/:id/status
+// @access  Private (Branch Admin / Super Admin)
+exports.toggleBranchStaffStatus = async (req, res, next) => {
+  try {
+    const targetUser = await User.findById(req.params.id);
+    if (!targetUser) {
+      return res.status(404).json({ success: false, message: 'Staff member not found' });
+    }
+
+    if (!isBranchAuthorized(req, targetUser.branchId)) {
+      return res.status(403).json({ success: false, message: 'Unauthorized: Staff member belongs to another branch' });
+    }
+
+    if (['super_admin', 'super_management', 'branch_admin'].includes(targetUser.role) && req.user.role !== 'super_admin') {
+      return res.status(403).json({ success: false, message: 'Cannot modify administrative peers' });
+    }
+
+    targetUser.isActive = !targetUser.isActive;
+    targetUser.tokenVersion = (targetUser.tokenVersion || 0) + 1;
+    await targetUser.save();
+
+    const userCache = require('../utils/userCache');
+    userCache.del(targetUser._id);
+
+    res.json({
+      success: true,
+      message: `Staff account ${targetUser.isActive ? 'activated' : 'deactivated'}`,
+      isActive: targetUser.isActive,
+    });
+  } catch (err) { next(err); }
+};
+
+// @desc    Remove an employee from a branch
+// @route   DELETE /api/users/branch/staff/:id
+// @access  Private (Branch Admin / Super Admin)
+exports.deleteBranchStaff = async (req, res, next) => {
+  try {
+    const targetUser = await User.findById(req.params.id);
+    if (!targetUser) {
+      return res.status(404).json({ success: false, message: 'Staff member not found' });
+    }
+
+    if (!isBranchAuthorized(req, targetUser.branchId)) {
+      return res.status(403).json({ success: false, message: 'Unauthorized: Staff member belongs to another branch' });
+    }
+
+    if (['super_admin', 'super_management', 'branch_admin'].includes(targetUser.role) && req.user.role !== 'super_admin') {
+      return res.status(403).json({ success: false, message: 'Cannot remove administrative superiors' });
+    }
+
+    await User.findByIdAndDelete(req.params.id);
+
+    const userCache = require('../utils/userCache');
+    userCache.del(targetUser._id);
+
+    res.json({ success: true, message: 'Staff account removed successfully' });
+  } catch (err) { next(err); }
+};
+
