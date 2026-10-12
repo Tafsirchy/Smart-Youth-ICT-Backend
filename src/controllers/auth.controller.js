@@ -22,6 +22,8 @@ const serializeUser = (user) => ({
   providers: user.providers,
   isVerified: user.isVerified,
   branchId: user.branchId,
+  secondaryBranches: user.secondaryBranches || [],
+  permissions: user.permissions || [],
 });
 
 const sendAuthResponse = (res, statusCode, user) => {
