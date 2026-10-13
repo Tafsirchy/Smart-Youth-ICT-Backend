@@ -351,6 +351,46 @@ const emailService = {
       text: `Your password was recently changed. If you didn't do this, please contact support immediately.`,
       html: wrapLayout('Security Alert', content, 'Your account security is our priority.')
     });
+  },
+
+  /**
+   * 🎓 Student Account Created — Credentials Email
+   * Sent when an admin/manager manually creates a student account.
+   */
+  sendStudentCredentials: async ({ name, email, password, branchName, loginUrl }) => {
+    const branch = branchName || 'Smart Youth ICT';
+    const url = loginUrl || `${FRONTEND_URL}/login`;
+    const content = `
+      <h2 style="color: #1e1b4b; font-size: 20px; font-weight: 700; border-bottom: 2px solid #db2711; display: inline-block; padding-bottom: 5px;">Welcome to ${branch}, ${name}! 🎓</h2>
+      <p style="margin-top: 20px;">Your student account has been created on the <strong>SYICT Learning Platform</strong>. Use the credentials below to log in and start your learning journey.</p>
+
+      <div style="background-color: #fff7ed; border: 2px solid #fdba74; padding: 25px; border-radius: 12px; margin: 30px 0;">
+        <p style="color: #9a3412; font-weight: 700; margin: 0 0 15px 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em;">Your Login Credentials</p>
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 8px 0; color: #78350f; font-size: 14px; width: 120px;">Email:</td>
+            <td style="padding: 8px 0; font-family: monospace; font-size: 14px; background: #fff; padding: 6px 12px; border-radius: 6px; color: #1e1b4b; font-weight: 600;">${email}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; color: #78350f; font-size: 14px;">Password:</td>
+            <td style="padding: 8px 0; font-family: monospace; font-size: 15px; background: #fff; padding: 6px 12px; border-radius: 6px; color: #1e1b4b; font-weight: 700; letter-spacing: 0.08em;">${password}</td>
+          </tr>
+        </table>
+      </div>
+
+      <p style="color: #ef4444; font-size: 13px; font-weight: 600;">⚠️ Please change your password after your first login to secure your account.</p>
+
+      <div style="text-align: center; margin: 40px 0;">
+        <a href="${url}" style="background-color: #db2777; color: #ffffff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 16px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(219, 39, 119, 0.4);">Login to Dashboard →</a>
+      </div>
+
+      <p style="font-size: 12px; color: #94a3b8; text-align: center;">If you did not expect this email, please contact your branch admin immediately.</p>
+    `;
+    return emailService._send({
+      to: email,
+      subject: `🎓 Your SYICT Student Account is Ready — ${branch}`,
+      html: wrapLayout('Student Account Created', content, `Branch: ${branch}`)
+    });
   }
 };
 
