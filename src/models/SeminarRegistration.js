@@ -7,7 +7,9 @@ const SeminarSchema = new mongoose.Schema(
     email:    String,
     source:   String,
     seminar:  String,  // Seminar name/date
+    seminarId: { type: mongoose.Schema.Types.ObjectId, ref: 'Seminar', index: true },
     attended: { type: Boolean, default: false },
+    attendanceStatus: { type: String, enum: ['registered', 'attended', 'absent'], default: 'registered' },
     branchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', index: true },
   },
   { timestamps: true },
