@@ -54,7 +54,7 @@ router.delete('/branch/staff/:id',           protect, authorize(...allManagerRol
 // General User Management (Super Admin & Admins)
 // ─────────────────────────────────────────────────────────────
 router.get('/',             protect, authorize(...allManagerRoles), getAllUsers);
-router.post('/',            protect, authorize(...superRoles), adminCreateUser);
+router.post('/',            protect, authorize(...allManagerRoles), adminCreateUser);
 router.post('/invite',      protect, emailLimiter, authorize(...superRoles), inviteStaff);
 
 router.get('/:id',          protect, authorize(...allManagerRoles), getUserById);
