@@ -172,30 +172,71 @@ exports.toggleUserStatus = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// @desc    Admin: Create a new user manually
+// @desc    Admin: Create a new user manually (with credential email)
 // @route   POST /api/users
-// @access  Private (super_admin)
+// @access  Private (super_admin / branch_admin / branch_management)
 exports.adminCreateUser = async (req, res, next) => {
   try {
-    const { name, email, password, role, branchId, phone } = req.body;
+    const { name, email, role, phone } = req.body;
+    let { branchId, password } = req.body;
 
-    const exists = await User.findOne({ email });
+    // 🛡️ Branch Isolation: branch managers can only create users in their own branch
+    if (['branch_admin', 'branch_management'].includes(req.user.role)) {
+      const { getAllowedBranches } = require('../utils/branchHelper');
+      const allowedBranches = getAllowedBranches(req.user);
+      if (branchId && !allowedBranches.includes(branchId.toString())) {
+        return res.status(403).json({ success: false, message: 'Access denied: You can only create students for your own branch.' });
+      }
+      // Default to the manager's own branch if not specified
+      if (!branchId && allowedBranches.length > 0) {
+        branchId = allowedBranches[0];
+      }
+    }
+
+    const exists = await User.findOne({ email: String(email).toLowerCase().trim() });
     if (exists) return res.status(400).json({ success: false, message: 'Email already registered' });
+
+    // 🔑 Auto-generate a secure password if not provided
+    const rawPassword = password && password.trim() ? password.trim() : crypto.randomBytes(6).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 10) + '@1';
+
+    // Resolve branch name for the email
+    let branchDoc = null;
+    if (branchId) {
+      branchDoc = await Branch.findById(branchId).lean();
+    }
 
     const user = await User.create({
       name,
-      email,
-      password,
+      email: String(email).toLowerCase().trim(),
+      password: rawPassword,
       role: role || 'student',
       branchId: branchId || null,
       phone: phone || '',
-      isVerified: true // Admins bypass verification
+      isVerified: true // Admins bypass email verification
     });
 
+    // 📧 Fire credential email asynchronously (don't block response)
+    const locale = user.language === 'en' ? 'en' : 'bn';
+    const loginUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/${locale}/login`;
+    setTimeout(() => {
+      emailService.sendStudentCredentials({
+        name: user.name,
+        email: user.email,
+        password: rawPassword,
+        branchName: branchDoc?.name || 'Smart Youth ICT',
+        loginUrl
+      }).catch(err => console.error('[Student Credentials Email Failed]', err.message));
+    }, 0);
+
     const responseUser = await User.findById(user._id).select('-password');
-    res.status(201).json({ success: true, data: responseUser });
+    res.status(201).json({
+      success: true,
+      data: responseUser,
+      message: `Student account created. Credentials have been sent to ${user.email}.`
+    });
   } catch (err) { next(err); }
 };
+
 
 // @desc    Super Admin invites a staff member (role + branch pre-assigned, staff sets own password via emailed link)
 // @route   POST /api/users/invite
