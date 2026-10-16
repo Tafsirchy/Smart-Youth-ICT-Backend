@@ -1,4 +1,6 @@
 const express = require('express');
+const upload = require('../middleware/upload.middleware');
+const { uploadToImageBB } = require('../services/imagebb.service');
 const router  = express.Router();
 const { protect } = require('../middleware/auth.middleware');
 const { requireAccess, isBranchAuthorized } = require('../middleware/rbac.middleware');
@@ -23,11 +25,21 @@ router.get('/', protect, requireAccess(PERMISSIONS.PAYMENTS_VIEW, PERMISSIONS.PA
 // ─────────────────────────────────────────────────────────
 // Manual Payments (Bank, bKash, Nagad, Rocket)
 // ─────────────────────────────────────────────────────────
-router.post('/manual/submit', protect, async (req, res, next) => {
+router.post('/manual/submit', protect, upload.single('slip'), async (req, res, next) => {
   try {
-    const { courseId, amount, method, transactionId, senderNumber, slipUrl } = req.body;
+    const { courseId, amount, method, transactionId, senderNumber, bankName } = req.body;
+    let slipUrl = req.body.slipUrl;
+
     if (!courseId || !amount || !method) {
       return res.status(400).json({ message: 'Course ID, amount, and payment method are required' });
+    }
+
+    if (req.file) {
+      try {
+        slipUrl = await uploadToImageBB(req.file.buffer);
+      } catch (e) {
+        slipUrl = `data:${req.file.mimetype || 'image/jpeg'};base64,${req.file.buffer.toString('base64')}`;
+      }
     }
 
     // Check for existing pending/completed payments for this course
@@ -56,6 +68,7 @@ router.post('/manual/submit', protect, async (req, res, next) => {
       amount: Number(amount),
       transactionId,
       senderNumber,
+      bankName,
       slip: slipUrl, 
       status: 'pending',
     });

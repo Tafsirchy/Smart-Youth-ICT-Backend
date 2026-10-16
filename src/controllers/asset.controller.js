@@ -45,3 +45,31 @@ exports.updateAsset = async (req, res, next) => {
         next(err);
     }
 };
+
+const { uploadToImageBB } = require('../services/imagebb.service');
+
+exports.uploadAssetImage = async (req, res, next) => {
+  try {
+    const file = req.file || (req.files && (req.files.asset?.[0] || req.files.image?.[0] || req.files.file?.[0]));
+    if (!file) {
+      return res.status(400).json({ success: false, message: 'No file provided' });
+    }
+
+    let url;
+    try {
+      url = await uploadToImageBB(file.buffer);
+    } catch (imgbbErr) {
+      console.warn('ImageBB upload failed or key invalid, falling back to base64 Data URL:', imgbbErr.message);
+      const mimeType = file.mimetype || 'image/png';
+      url = `data:${mimeType};base64,${file.buffer.toString('base64')}`;
+    }
+
+    res.json({
+      success: true,
+      data: { url }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
