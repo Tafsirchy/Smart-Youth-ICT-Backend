@@ -3,11 +3,19 @@ const errorMiddleware = (err, req, res, next) => {
   let status = err.statusCode || err.status || 500;
   let message = err.message || 'Internal Server Error';
 
-  // Mongoose validation/casting failures are caused by the request payload, so
-  // they must be reported as client errors instead of an opaque 500.
-  if (err.name === 'ValidationError' && err.errors) {
+  // Always ensure CORS headers are present on error responses
+  const origin = req.headers?.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+
+  // Handle entity too large (413)
+  if (err.type === 'entity.too.large' || err.status === 413) {
+    status = 413;
+    message = 'Request payload too large. Please upload smaller or compressed images.';
+  } else if (err.name === 'ValidationError' && err.errors) {
     status = 400;
-    // Mongoose already formats `message` as "<model> validation failed: path: detail".
     const details = Object.values(err.errors)
       .map((detail) => (typeof detail === 'string' ? detail : detail && detail.message))
       .filter(Boolean);

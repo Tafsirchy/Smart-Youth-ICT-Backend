@@ -424,3 +424,21 @@ exports.getSettingByKey = async (req, res, next) => {
     res.json({ success: true, data: setting ? setting.value : null });
   } catch (err) { next(err); }
 };
+
+exports.getPublicSettings = async (req, res, next) => {
+  try {
+    const settings = await SystemSetting.find({
+      key: { $in: ['maintenanceMode', 'registrationOpen', 'globalMessage'] }
+    });
+    const map = {
+      maintenanceMode: false,
+      registrationOpen: true,
+      globalMessage: []
+    };
+    settings.forEach(s => {
+      map[s.key] = s.value;
+    });
+    res.json({ success: true, data: map });
+  } catch (err) { next(err); }
+};
+

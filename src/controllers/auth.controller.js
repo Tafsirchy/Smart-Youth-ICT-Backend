@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const { OAuth2Client } = require("google-auth-library");
 const User = require("../models/User");
 const Branch = require("../models/Branch");
+const SystemSetting = require("../models/SystemSetting");
 const emailService = require("../services/email.service");
 const { generateToken } = require("../utils/jwt");
 const userCache = require("../utils/userCache");
@@ -43,6 +44,16 @@ const sendAuthResponse = (res, statusCode, user) => {
 // POST /api/auth/register
 const register = async (req, res, next) => {
   try {
+    // 🛡️ Security Check: Are registrations open globally?
+    const regSetting = await SystemSetting.findOne({ key: "registrationOpen" });
+    if (regSetting && regSetting.value === false) {
+      return res.status(403).json({
+        success: false,
+        code: "REGISTRATIONS_CLOSED",
+        message: "New student registrations are currently closed by administration.",
+      });
+    }
+
     const { name, phone, password, branchId } = req.body;
     const email = normalizeEmail(req.body.email);
     const existing = await User.findOne({ email });
@@ -147,6 +158,16 @@ const googleLogin = async (req, res, next) => {
     }
 
     if (!user) {
+      // 🛡️ Security Check: Are registrations open globally?
+      const regSetting = await SystemSetting.findOne({ key: "registrationOpen" });
+      if (regSetting && regSetting.value === false) {
+        return res.status(403).json({
+          success: false,
+          code: "REGISTRATIONS_CLOSED",
+          message: "New registrations are currently closed by administration. Existing accounts can still log in.",
+        });
+      }
+
       user = await User.create({
         name: (name || payload.name || email.split("@")[0]).trim(),
         email,

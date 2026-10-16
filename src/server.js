@@ -15,6 +15,8 @@ const morgan = require('morgan');
 const connectDB = require('./config/db');
 const compression = require('compression');
 const errorMiddleware = require('./middleware/error.middleware');
+const { verifyToken } = require('./utils/jwt');
+const SystemSetting = require('./models/SystemSetting');
 
 // Diagnostic: Log environment status (Masked)
 const maskedUri = process.env.MONGO_URI ? `${process.env.MONGO_URI.substring(0, 15)}...` : 'MISSING';
@@ -62,15 +64,21 @@ const allowedOrigins = [
   'https://smart-youth-ict-frontend.vercel.app',
   'http://localhost:3000',
   'http://localhost:3001',
-  'https://www.smartyouthict.com'
+  'https://www.smartyouthict.com',
+  'https://smartyouthict.com'
 ].filter(Boolean);
 
 const corsOptions = {
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1 || origin.endsWith('.vercel.app')) {
+    if (
+      !origin ||
+      allowedOrigins.indexOf(origin) !== -1 ||
+      origin.endsWith('.vercel.app') ||
+      origin.endsWith('smartyouthict.com')
+    ) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      callback(null, true);
     }
   },
   credentials: true,
@@ -94,8 +102,61 @@ app.use(async (req, res, next) => {
 
 app.use(morgan('dev'));
 app.use('/api/payments/webhook/stripe', express.raw({ type: 'application/json' }));
-app.use(express.json({ limit: '5mb' }));
-app.use(express.urlencoded({ extended: true, limit: '5mb' }));
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
+
+// ─── 🛡️ Platform Maintenance Mode Middleware ─────────────────────────
+let cachedMaintenanceMode = null;
+let lastMaintenanceCheck = 0;
+
+app.use(async (req, res, next) => {
+  try {
+    const path = req.path;
+    // Always permit health checks, public settings, login, super admin endpoints, stripe webhook
+    if (
+      path === '/health' ||
+      path.startsWith('/api/cms/settings') ||
+      path.startsWith('/api/super') ||
+      path === '/api/auth/login' ||
+      path.startsWith('/api/payments/webhook')
+    ) {
+      return next();
+    }
+
+    // Cache check for 3 seconds to avoid constant DB queries
+    const now = Date.now();
+    if (cachedMaintenanceMode === null || now - lastMaintenanceCheck > 3000) {
+      const setting = await SystemSetting.findOne({ key: 'maintenanceMode' });
+      cachedMaintenanceMode = setting ? Boolean(setting.value) : false;
+      lastMaintenanceCheck = now;
+    }
+
+    if (!cachedMaintenanceMode) {
+      return next();
+    }
+
+    // If maintenance mode is active, allow Super Admins with valid Bearer token
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const decoded = verifyToken(authHeader.split(' ')[1]);
+        if (decoded?.role === 'super_admin' || decoded?.role === 'super_management') {
+          return next();
+        }
+      } catch (e) {
+        // invalid or expired token
+      }
+    }
+
+    return res.status(503).json({
+      success: false,
+      code: 'MAINTENANCE_MODE',
+      message: 'The Smart Youth ICT platform is currently undergoing scheduled maintenance. Please check back shortly.'
+    });
+  } catch (err) {
+    next();
+  }
+});
 
 // ─── API Routes ───────────────────────────────────────────────────
 const API = '/api';
