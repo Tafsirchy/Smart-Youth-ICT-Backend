@@ -4,7 +4,8 @@ const {
     createTicket, 
     getMyTickets, 
     getTicket, 
-    addTicketResponse 
+    addTicketResponse,
+    resolveTicket
 } = require('../controllers/support.controller');
 
 const router = express.Router();
@@ -15,5 +16,6 @@ router.post('/', createTicket);
 router.get('/me', getMyTickets);
 router.get('/:id', getTicket);
 router.put('/:id/response', addTicketResponse);
+router.put('/:id/resolve', resolveTicket);
 
 module.exports = router;
