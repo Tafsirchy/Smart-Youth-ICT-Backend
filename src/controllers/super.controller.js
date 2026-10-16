@@ -494,7 +494,9 @@ exports.toggleBranchStatus = async (req, res, next) => {
       actor: req.user._id, 
       action: branch.isActive ? 'ACTIVATE_BRANCH' : 'DEACTIVATE_BRANCH', 
       entity: 'Branch', 
-      entityId: branch._id 
+      entityId: branch._id,
+      branchId: branch._id,
+      details: { branchName: branch.name, code: branch.code, status: branch.isActive ? 'Active' : 'Inactive' }
     });
 
     res.json({ 
@@ -611,7 +613,10 @@ exports.deleteMasterCourse = async (req, res, next) => {
 // @access  Private (Super Admin)
 exports.getTickets = async (req, res, next) => {
   try {
-    const tickets = await SupportTicket.find().populate('user', 'name email').sort('-createdAt');
+    const tickets = await SupportTicket.find()
+      .populate('user', 'name email role')
+      .populate('responses.user', 'name role')
+      .sort('-createdAt');
     res.json({ success: true, data: tickets });
   } catch (err) { next(err); }
 };
@@ -621,9 +626,13 @@ exports.getTickets = async (req, res, next) => {
 // @access  Private (Super Admin)
 exports.replyToTicket = async (req, res, next) => {
   try {
-    const { message } = req.body;
-    const ticket = await SupportTicket.findById(req.params.id);
+    const { message, attachment } = req.body;
+    const ticket = await SupportTicket.findById(req.params.id).populate('user', 'name email');
     if (!ticket) return res.status(404).json({ success: false, message: 'Ticket not found' });
+
+    if (!message && !attachment) {
+      return res.status(400).json({ success: false, message: 'Message or attachment is required' });
+    }
 
     const cleanMessage = sanitizeHtml(message || "", {
       allowedTags: ['b', 'i', 'em', 'strong', 'a', 'br', 'p'],
@@ -633,38 +642,53 @@ exports.replyToTicket = async (req, res, next) => {
     ticket.responses.push({
       user: req.user._id,
       message: cleanMessage,
+      attachment: attachment || null,
       createdAt: Date.now()
     });
     
     if (ticket.status === 'open') ticket.status = 'in-progress';
     await ticket.save();
 
-    // 📧 Notify Student (Async)
-    emailService._send({
-      to: ticket.user.email,
-      subject: `🎫 Update on Ticket: ${ticket.subject}`,
-      html: `
-        <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
-          <h2 style="color: #1e1b4b;">Support Ticket Update</h2>
-          <p style="color: #475569;">Hi ${ticket.user.name}, the Head Office has responded to your ticket:</p>
-          <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #db2777;">
-            <p style="margin: 0;">${cleanMessage}</p>
-          </div>
-          <p style="color: #64748b; font-size: 14px;">Log in to the dashboard to view the full conversation history.</p>
-        </div>
-      `
-    }).catch(e => console.error('[Ticket Email Failed]', e.message));
+    const populatedTicket = await SupportTicket.findById(ticket._id)
+      .populate('user', 'name email role')
+      .populate('responses.user', 'name role');
 
-    res.json({ success: true, data: ticket });
+    // 📧 Notify Student (Async)
+    if (ticket.user && ticket.user.email) {
+      emailService._send({
+        to: ticket.user.email,
+        subject: `🎫 Update on Ticket: ${ticket.subject}`,
+        html: `
+          <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
+            <h2 style="color: #1e1b4b;">Support Ticket Update</h2>
+            <p style="color: #475569;">Hi ${ticket.user.name}, the Head Office has responded to your ticket:</p>
+            <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #db2777;">
+              <p style="margin: 0;">${cleanMessage || 'Attachment sent'}</p>
+            </div>
+            <p style="color: #64748b; font-size: 14px;">Log in to the dashboard to view the full conversation history.</p>
+          </div>
+        `
+      }).catch(e => console.error('[Ticket Email Failed]', e.message));
+    }
+
+    res.json({ success: true, data: populatedTicket });
   } catch (err) { next(err); }
 };
 
-// @desc    Resolve a support ticket
+// @desc    Resolve or update status of a support ticket
 // @route   PUT /api/super/tickets/:id/resolve
 // @access  Private (Super Admin)
 exports.resolveTicket = async (req, res, next) => {
   try {
-    const ticket = await SupportTicket.findByIdAndUpdate(req.params.id, { status: 'resolved' }, { new: true });
+    const { status, priority } = req.body || {};
+    const newStatus = status || 'resolved';
+    const update = { status: newStatus };
+    if (priority) update.priority = priority;
+    if (newStatus === 'resolved') update.resolvedAt = new Date();
+
+    const ticket = await SupportTicket.findByIdAndUpdate(req.params.id, update, { new: true })
+      .populate('user', 'name email role')
+      .populate('responses.user', 'name role');
     if (!ticket) return res.status(404).json({ success: false, message: 'Ticket not found' });
     res.json({ success: true, data: ticket });
   } catch (err) { next(err); }
@@ -733,10 +757,50 @@ exports.deleteHelpArticle = async (req, res, next) => {
 // @access  Private (Super Admin)
 exports.getAuditLogs = async (req, res, next) => {
   try {
-    const logs = await AuditLog.find()
-      .populate('actor', 'name role')
+    const rawLogs = await AuditLog.find()
+      .populate('actor', 'name email role')
+      .populate('branchId', 'name code')
       .sort('-createdAt')
-      .limit(200);
+      .limit(200)
+      .lean();
+
+    // Collect all branch IDs from logs where entity === 'Branch'
+    const branchIdsToFetch = new Set();
+    rawLogs.forEach(log => {
+      if (!log.branchId && log.entity === 'Branch' && log.entityId) {
+        branchIdsToFetch.add(log.entityId.toString());
+      }
+    });
+
+    let branchMap = {};
+    if (branchIdsToFetch.size > 0) {
+      const branches = await Branch.find({ _id: { $in: Array.from(branchIdsToFetch) } })
+        .select('name code')
+        .lean();
+      branches.forEach(b => {
+        branchMap[b._id.toString()] = b;
+      });
+    }
+
+    const logs = rawLogs.map(log => {
+      let resolvedBranchName = log.branchId?.name || log.details?.branchName || log.details?.name || null;
+      let resolvedBranchCode = log.branchId?.code || log.details?.code || null;
+
+      if (!resolvedBranchName && log.entity === 'Branch' && log.entityId) {
+        const found = branchMap[log.entityId.toString()];
+        if (found) {
+          resolvedBranchName = found.name;
+          resolvedBranchCode = found.code;
+        }
+      }
+
+      return {
+        ...log,
+        resolvedBranchName,
+        resolvedBranchCode
+      };
+    });
+
     res.json({ success: true, data: logs });
   } catch (err) { next(err); }
 };
