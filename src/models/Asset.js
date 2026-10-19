@@ -10,6 +10,7 @@ const AssetSchema = new mongoose.Schema(
     status:      { type: String, enum: ['available', 'in-use', 'maintenance', 'retired'], default: 'available' },
     purchasedAt: Date,
     description: String,
+    image:       { type: String, trim: true },
     assignedTo:  { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Optional: Assign to staff
   },
   { timestamps: true },

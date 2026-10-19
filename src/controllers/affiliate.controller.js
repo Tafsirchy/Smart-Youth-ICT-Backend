@@ -126,4 +126,134 @@ exports.updateReferralCode = async (req, res, next) => {
   }
 };
 
-// Functions are exported via `exports.*` declarations above.
+// @desc    Get affiliates for branch admin with stats and withdrawal pipeline
+// @route   GET /api/affiliate/admin
+// @access  Private (Branch Admin / Super Admin)
+exports.getBranchAffiliates = async (req, res, next) => {
+  try {
+    const rawBranch = req.query.branchId || req.user.branchId;
+    const isSuper = req.user.role === 'super_admin' || req.user.role === 'super_management';
+
+    let filter = {};
+    if (rawBranch && (!isSuper || req.query.branchId)) {
+      const Branch = require('../models/Branch');
+      const mongoose = require('mongoose');
+      let targetId = null;
+
+      if (mongoose.Types.ObjectId.isValid(rawBranch)) {
+        targetId = rawBranch;
+      } else {
+        const branchDoc = await Branch.findOne({
+          $or: [{ slug: rawBranch.toLowerCase() }, { code: rawBranch.toUpperCase() }]
+        }).select('_id');
+        if (branchDoc) targetId = branchDoc._id;
+      }
+
+      if (targetId) {
+        const User = require('../models/User');
+        const branchUserIds = await User.find({ branchId: targetId }).distinct('_id');
+        filter.user = { $in: branchUserIds };
+      }
+    }
+
+    const affiliates = await Affiliate.find(filter)
+      .populate('user', 'name email phone avatar role branchId')
+      .populate('referredUsers', 'name email createdAt')
+      .sort('-createdAt');
+
+    // Aggregate KPI Stats
+    let totalEarnings = 0;
+    let pendingPayoutsAmount = 0;
+    let pendingPayoutsCount = 0;
+    let totalReferredStudents = 0;
+    const allWithdrawals = [];
+
+    affiliates.forEach((aff) => {
+      totalEarnings += Number(aff.totalEarnings) || 0;
+      totalReferredStudents += Array.isArray(aff.referredUsers) ? aff.referredUsers.length : 0;
+
+      if (Array.isArray(aff.withdrawals)) {
+        aff.withdrawals.forEach((w) => {
+          allWithdrawals.push({
+            ...w.toObject(),
+            affiliateId: aff._id,
+            user: aff.user,
+            referralCode: aff.referralCode,
+          });
+          if (w.status === 'pending') {
+            pendingPayoutsCount += 1;
+            pendingPayoutsAmount += Number(w.amount) || 0;
+          }
+        });
+      }
+    });
+
+    // Sort withdrawals newest first
+    allWithdrawals.sort((a, b) => new Date(b.requestedAt || 0) - new Date(a.requestedAt || 0));
+
+    res.json({
+      success: true,
+      count: affiliates.length,
+      data: affiliates,
+      withdrawals: allWithdrawals,
+      stats: {
+        totalAffiliates: affiliates.length,
+        totalEarnings,
+        pendingPayoutsAmount,
+        pendingPayoutsCount,
+        totalReferredStudents,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc    Approve or reject affiliate withdrawal payout
+// @route   PATCH /api/affiliate/admin/withdrawals/:affiliateId/:withdrawalId
+// @access  Private (Branch Admin / Super Admin)
+exports.processWithdrawalStatus = async (req, res, next) => {
+  try {
+    const { affiliateId, withdrawalId } = req.params;
+    const { status, note } = req.body; // 'paid' or 'rejected'
+
+    if (!['paid', 'rejected'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'Status must be paid or rejected' });
+    }
+
+    const affiliate = await Affiliate.findById(affiliateId).populate('user', 'name email branchId');
+    if (!affiliate) {
+      return res.status(404).json({ success: false, message: 'Affiliate not found' });
+    }
+
+    const withdrawal = affiliate.withdrawals.id(withdrawalId);
+    if (!withdrawal) {
+      return res.status(404).json({ success: false, message: 'Withdrawal request not found' });
+    }
+
+    if (withdrawal.status === 'paid' && status === 'paid') {
+      return res.status(400).json({ success: false, message: 'Withdrawal already marked as paid' });
+    }
+
+    if (status === 'rejected') {
+      // Refund balance back to pendingAmount
+      affiliate.pendingAmount += Number(withdrawal.amount) || 0;
+      withdrawal.status = 'rejected';
+      withdrawal.adminNote = note || 'Rejected by administration';
+    } else if (status === 'paid') {
+      withdrawal.status = 'paid';
+      withdrawal.paidAt = new Date();
+      withdrawal.adminNote = note || 'Payment completed';
+    }
+
+    await affiliate.save();
+
+    res.json({
+      success: true,
+      message: `Withdrawal successfully marked as ${status}`,
+      data: affiliate,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
