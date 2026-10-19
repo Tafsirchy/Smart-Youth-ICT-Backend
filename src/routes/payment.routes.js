@@ -36,9 +36,18 @@ const handleSlipUpload = (req, res, next) => {
 
 router.post('/manual/submit', protect, handleSlipUpload, async (req, res, next) => {
   try {
-    const body = req.body || {};
-    const courseId = body.courseId || body.course;
-    const amount = body.amount !== undefined && body.amount !== null && body.amount !== '' ? Number(body.amount) : null;
+    let body = req.body || {};
+    if (typeof body === 'string') {
+      try {
+        body = JSON.parse(body);
+      } catch (e) {}
+    }
+    const courseId = body.courseId || body.course || body.course_id;
+    let rawAmount = body.amount;
+    if (typeof rawAmount === 'string') {
+      rawAmount = rawAmount.replace(/[^0-9.]/g, '');
+    }
+    const amount = (rawAmount !== undefined && rawAmount !== null && rawAmount !== '') ? Number(rawAmount) : null;
     const method = body.method ? String(body.method).toLowerCase().trim() : '';
     const transactionId = body.transactionId ? String(body.transactionId).trim() : '';
     const senderNumber = body.senderNumber ? String(body.senderNumber).trim() : '';
@@ -137,14 +146,15 @@ router.put('/:id/verify', protect, requireAccess(PERMISSIONS.PAYMENTS_VERIFY), a
       // Activate enrollment
       await Enrollment.findOneAndUpdate(
         { user: payment.user, course: payment.course },
-        { paymentStatus: 'paid', branchId: payment.branchId },
+        { paymentStatus: 'paid', isActive: true, branchId: payment.branchId },
         { upsert: true, new: true },
       );
     } else if (status === 'failed') {
       // Mark enrollment as failed if it exists
       await Enrollment.findOneAndUpdate(
         { user: payment.user, course: payment.course },
-        { paymentStatus: 'failed' }
+        { paymentStatus: 'failed', isActive: false },
+        { upsert: true, new: true },
       );
     }
 
