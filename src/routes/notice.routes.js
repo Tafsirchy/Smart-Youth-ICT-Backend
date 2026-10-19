@@ -9,7 +9,8 @@ const {
   deleteNotice,
   togglePinNotice,
 } = require('../controllers/notice.controller');
-const { protect, authorize } = require('../middleware/auth.middleware');
+const { protect } = require('../middleware/auth.middleware');
+const { authorize } = require('../middleware/role.middleware');
 
 // Public route for landing campus page
 router.get('/public/:branchId', getPublicCampusNotices);

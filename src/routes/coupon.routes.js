@@ -8,8 +8,8 @@ const {
   deleteCoupon,
   toggleCouponStatus,
 } = require('../controllers/coupon.controller');
-const { protect, authorize } = require('../middleware/auth.middleware');
-const { requirePermission } = require('../middleware/rbac.middleware');
+const { protect } = require('../middleware/auth.middleware');
+const { authorize } = require('../middleware/role.middleware');
 
 // Public checkout validation
 router.post('/validate', validateCouponPublic);
