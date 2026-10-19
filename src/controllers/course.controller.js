@@ -378,21 +378,33 @@ const enrollCourse = async (req, res, next) => {
       course: course._id,
     });
     if (existing) {
-      return res
-        .status(409)
-        .json({
-          success: false,
-          message: "You are already enrolled in this course",
-        });
+      if (existing.paymentStatus === 'paid') {
+        return res
+          .status(409)
+          .json({
+            success: false,
+            message: "You are already enrolled in this course",
+            alreadyEnrolled: true,
+          });
+      }
+      // If payment is still pending, allow student to proceed to payment
+      return res.status(200).json({
+        success: true,
+        data: existing,
+        message: "Enrollment is pending. Please complete your payment.",
+        isPending: true,
+      });
     }
+
+    const isFree = !course.price || Number(course.price) === 0;
 
     // Create enrollment record
     const enrollment = await Enrollment.create({
       user: userId,
       course: course._id,
       branchId: course.branchId, // Inherit branch from child course
-      paymentStatus: "pending",
-      isActive: false,
+      paymentStatus: isFree ? "paid" : "pending",
+      isActive: isFree,
     });
 
     // Attempt to send enrollment confirmation email (non-blocking)
@@ -408,8 +420,9 @@ const enrollCourse = async (req, res, next) => {
       .json({
         success: true,
         data: enrollment,
-        message:
-          "Enrollment initiated. Complete payment to activate course access.",
+        message: isFree
+          ? "Successfully enrolled in this course."
+          : "Enrollment initiated. Complete payment to activate course access.",
       });
   } catch (err) {
     next(err);
