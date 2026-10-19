@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const User = require('../models/User');
 const Enrollment = require('../models/Enrollment');
 const crypto = require('crypto');
