@@ -10,7 +10,11 @@ exports.getQuizzesByCourse = async (req, res, next) => {
     const { courseId } = req.params;
 
     if (req.user.role === 'student') {
-      const isEnrolled = await Enrollment.findOne({ user: req.user._id, course: courseId, isActive: true });
+      const isEnrolled = await Enrollment.findOne({ 
+        user: req.user._id, 
+        course: courseId, 
+        $or: [{ isActive: true }, { paymentStatus: 'paid' }] 
+      });
       if (!isEnrolled) return res.status(403).json({ success: false, message: 'Not enrolled in this course' });
     }
 
