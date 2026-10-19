@@ -804,3 +804,106 @@ exports.getAuditLogs = async (req, res, next) => {
     res.json({ success: true, data: logs });
   } catch (err) { next(err); }
 };
+
+// @desc    Get Central Branch Leaderboard & Comparative Intelligence
+// @route   GET /api/super/branches/analytics
+// @access  Private (Super Admin)
+exports.getBranchLeaderboardAnalytics = async (req, res, next) => {
+  try {
+    const Payment = require('../models/Payment');
+    const Expense = require('../models/Expense');
+    const CounselingSession = require('../models/CounselingSession');
+
+    const branches = await Branch.find({ isActive: true })
+      .select('name code city address phone email')
+      .lean();
+
+    const branchAnalytics = await Promise.all(
+      branches.map(async (b) => {
+        const [studentCount, revenueAgg, expenseAgg, counselingAgg, activeCourses] = await Promise.all([
+          User.countDocuments({ branchId: b._id, role: 'student' }),
+          Payment.aggregate([
+            { $match: { branchId: b._id, status: 'completed' } },
+            { $group: { _id: null, total: { $sum: '$amount' } } }
+          ]),
+          Expense.aggregate([
+            { $match: { branchId: b._id, status: 'approved' } },
+            { $group: { _id: null, total: { $sum: '$amount' } } }
+          ]),
+          CounselingSession.aggregate([
+            { $match: { branchId: b._id } },
+            {
+              $facet: {
+                total: [{ $count: 'count' }],
+                converted: [{ $match: { status: 'enrolled' } }, { $count: 'count' }]
+              }
+            }
+          ]),
+          Course.countDocuments({ branchId: b._id, isActive: true })
+        ]);
+
+        const revenue = revenueAgg[0]?.total || 0;
+        const expenses = expenseAgg[0]?.total || 0;
+        const netMargin = revenue - expenses;
+        const totalLeads = counselingAgg[0]?.total[0]?.count || 0;
+        const convertedLeads = counselingAgg[0]?.converted[0]?.count || 0;
+        const conversionRate = totalLeads > 0 ? Math.round((convertedLeads / totalLeads) * 100) : 0;
+
+        return {
+          _id: b._id,
+          name: b.name,
+          code: b.code,
+          city: b.city,
+          studentCount,
+          revenue,
+          expenses,
+          netMargin,
+          activeCourses,
+          totalLeads,
+          convertedLeads,
+          conversionRate
+        };
+      })
+    );
+
+    // Sort by revenue descending for leaderboard ranking
+    branchAnalytics.sort((a, b) => b.revenue - a.revenue);
+
+    // Network totals
+    const networkTotals = branchAnalytics.reduce(
+      (acc, b) => {
+        acc.totalStudents += b.studentCount;
+        acc.totalRevenue += b.revenue;
+        acc.totalExpenses += b.expenses;
+        acc.netOperatingProfit += b.netMargin;
+        acc.totalLeads += b.totalLeads;
+        acc.totalConverted += b.convertedLeads;
+        return acc;
+      },
+      {
+        totalStudents: 0,
+        totalRevenue: 0,
+        totalExpenses: 0,
+        netOperatingProfit: 0,
+        totalLeads: 0,
+        totalConverted: 0
+      }
+    );
+
+    networkTotals.overallConversionRate =
+      networkTotals.totalLeads > 0
+        ? Math.round((networkTotals.totalConverted / networkTotals.totalLeads) * 100)
+        : 0;
+
+    res.json({
+      success: true,
+      data: {
+        leaderboard: branchAnalytics,
+        networkTotals
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+

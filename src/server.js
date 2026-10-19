@@ -54,6 +54,7 @@ const counselingRoutes = require('./routes/counseling.routes');
 const routineRoutes = require('./routes/classSchedule.routes');
 const couponRoutes = require('./routes/coupon.routes');
 const noticeRoutes = require('./routes/notice.routes');
+const requisitionRoutes = require('./routes/requisition.routes');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -196,6 +197,7 @@ app.use(`${API}/counseling`, counselingRoutes);
 app.use(`${API}/routines`, routineRoutes);
 app.use(`${API}/coupons`, couponRoutes);
 app.use(`${API}/notices`, noticeRoutes);
+app.use(`${API}/requisitions`, requisitionRoutes);
 
 app.get('/health', (_, res) => res.json({ status: 'ok', ts: new Date() }));
 app.use('*', (_, res) => res.status(404).json({ message: 'Route not found' }));

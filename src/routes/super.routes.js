@@ -24,7 +24,8 @@ const {
   createHelpArticle,
   updateHelpArticle,
   deleteHelpArticle,
-  deleteMasterCourse
+  deleteMasterCourse,
+  getBranchLeaderboardAnalytics
 } = require('../controllers/super.controller');
 const { protect } = require('../middleware/auth.middleware');
 const { authorize } = require('../middleware/role.middleware');
@@ -40,6 +41,7 @@ router.get('/audit-logs', getAuditLogs);
 
 // Branch Management
 router.get('/branches',    getAllBranchesDetails);
+router.get('/branches/analytics', getBranchLeaderboardAnalytics);
 router.post('/onboard-branch', onboardBranch);
 router.put('/branches/:id',    updateBranch);
 router.patch('/branches/:id/toggle-status', toggleBranchStatus);
