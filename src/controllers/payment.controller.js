@@ -164,7 +164,7 @@ const stripeWebhook = async (req, res) => {
         // 2. Create actual Enrollment record
         await Enrollment.findOneAndUpdate(
           { user: payment.user, course: payment.course },
-          { paymentStatus: 'paid', branchId: payment.branchId },
+          { paymentStatus: 'paid', isActive: true, branchId: payment.branchId },
           { upsert: true, new: true }
         );
 
@@ -210,8 +210,8 @@ const bkashCallback = async (req, res, next) => {
 
           await Enrollment.findOneAndUpdate(
             { user: payment.user, course: payment.course },
-            { paymentStatus: 'paid', branchId: payment.branchId },
-            { upsert: true }
+            { paymentStatus: 'paid', isActive: true, branchId: payment.branchId },
+            { upsert: true, new: true }
           );
 
           // Notify (Placeholder)
