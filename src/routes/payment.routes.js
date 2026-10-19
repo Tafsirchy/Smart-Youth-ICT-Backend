@@ -25,13 +25,28 @@ router.get('/', protect, requireAccess(PERMISSIONS.PAYMENTS_VIEW, PERMISSIONS.PA
 // ─────────────────────────────────────────────────────────
 // Manual Payments (Bank, bKash, Nagad, Rocket)
 // ─────────────────────────────────────────────────────────
-router.post('/manual/submit', protect, upload.single('slip'), async (req, res, next) => {
-  try {
-    const { courseId, amount, method, transactionId, senderNumber, bankName } = req.body;
-    let slipUrl = req.body.slipUrl;
+const handleSlipUpload = (req, res, next) => {
+  upload.single('slip')(req, res, (err) => {
+    if (err) {
+      console.warn('[Manual Payment] Multer notice:', err.message);
+    }
+    next();
+  });
+};
 
-    if (!courseId || !amount || !method) {
-      return res.status(400).json({ message: 'Course ID, amount, and payment method are required' });
+router.post('/manual/submit', protect, handleSlipUpload, async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const courseId = body.courseId || body.course;
+    const amount = body.amount !== undefined && body.amount !== null && body.amount !== '' ? Number(body.amount) : null;
+    const method = body.method ? String(body.method).toLowerCase().trim() : '';
+    const transactionId = body.transactionId ? String(body.transactionId).trim() : '';
+    const senderNumber = body.senderNumber ? String(body.senderNumber).trim() : '';
+    const bankName = body.bankName ? String(body.bankName).trim() : '';
+    let slipUrl = body.slipUrl;
+
+    if (!courseId || amount === null || isNaN(amount) || !method) {
+      return res.status(400).json({ success: false, message: 'Course ID, amount, and payment method are required' });
     }
 
     if (req.file) {
@@ -50,11 +65,11 @@ router.post('/manual/submit', protect, upload.single('slip'), async (req, res, n
     });
     
     if (existing) {
-      return res.status(409).json({ message: 'A payment record already exists for this course' });
+      return res.status(409).json({ success: false, message: 'A payment record already exists for this course' });
     }
 
     // Determine branch context
-    let targetBranchId = req.body.branchId || req.user.branchId;
+    let targetBranchId = body.branchId || req.user.branchId;
     if (!targetBranchId && courseId) {
       const course = await Course.findById(courseId);
       if (course && course.branchId) targetBranchId = course.branchId;
@@ -65,11 +80,11 @@ router.post('/manual/submit', protect, upload.single('slip'), async (req, res, n
       course: courseId,
       branchId: targetBranchId || undefined,
       method: method || 'bank', 
-      amount: Number(amount),
+      amount: amount,
       transactionId,
       senderNumber,
       bankName,
-      slip: slipUrl, 
+      slip: slipUrl || '', 
       status: 'pending',
     });
     res.status(201).json({ success: true, data: payment, message: 'Payment submitted for review' });
