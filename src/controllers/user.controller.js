@@ -742,3 +742,59 @@ exports.deleteBranchStaff = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+// @desc    Public verification of student identity and enrollment credentials
+// @route   GET /api/users/public/verify-student/:studentId
+// @access  Public
+exports.verifyStudentPublic = async (req, res, next) => {
+  try {
+    const { studentId } = req.params;
+    let query = null;
+    if (mongoose.Types.ObjectId.isValid(studentId)) {
+      query = { _id: studentId };
+    } else {
+      return res.status(400).json({ success: false, message: 'Invalid Student ID format' });
+    }
+
+    const user = await User.findOne(query)
+      .select('name avatar role branchId createdAt isActive isVerified')
+      .populate('branchId', 'name code city address phone');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'No student found with this identification record.'
+      });
+    }
+
+    const Enrollment = require('../models/Enrollment');
+    const enrollments = await Enrollment.find({ user: user._id, isActive: true })
+      .populate('course', 'title thumbnail')
+      .select('course createdAt paymentStatus');
+
+    const formattedStudentId = `SYICT-${user.branchId?.code || 'HQ'}-${user._id.toString().slice(-6).toUpperCase()}`;
+
+    res.json({
+      success: true,
+      data: {
+        _id: user._id,
+        name: user.name,
+        avatar: user.avatar,
+        studentId: formattedStudentId,
+        role: user.role,
+        branch: user.branchId,
+        isVerified: user.isVerified || user.isActive,
+        enrollmentCount: enrollments.length,
+        courses: enrollments.map(e => ({
+          title: e.course?.title,
+          thumbnail: e.course?.thumbnail,
+          enrolledAt: e.createdAt,
+          paymentStatus: e.paymentStatus
+        })),
+        memberSince: user.createdAt
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+

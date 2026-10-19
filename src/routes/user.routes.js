@@ -23,10 +23,12 @@ const {
   updateStaffPermissions,
   toggleBranchStaffStatus,
   deleteBranchStaff,
+  verifyStudentPublic,
 } = require('../controllers/user.controller');
 
-// Public listing
+// Public listing & verification
 router.get('/instructors/public', getPublicInstructors);
+router.get('/public/verify-student/:studentId', verifyStudentPublic);
 
 // Public: staff accepts invite (token-gated)
 router.post('/invite/accept', authLimiter, acceptInviteValidation, handleValidation, acceptInvite);
