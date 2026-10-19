@@ -9,6 +9,7 @@ const EnrollmentSchema = new mongoose.Schema(
     expiresAt:         Date,
     referredBy:        { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     branchId:          { type: mongoose.Schema.Types.ObjectId, ref: 'Branch' },
+    isActive:          { type: Boolean, default: false },
   },
   { timestamps: true },
 );
