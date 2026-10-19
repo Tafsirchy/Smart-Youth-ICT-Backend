@@ -13,6 +13,7 @@ const router = express.Router();
 
 // Public route for landing page visitors
 router.post('/book', bookCounseling);
+router.post('/public/book', bookCounseling);
 
 // Protected admin / branch management routes
 router.use(protect);
