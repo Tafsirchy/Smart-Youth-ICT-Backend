@@ -12,7 +12,11 @@ exports.getLessonsByCourse = async (req, res, next) => {
 
     // 🛡️ Security Fix: Authorization Check
     if (req.user.role === 'student') {
-      const isEnrolled = await require('../models/Enrollment').findOne({ user: req.user._id, course: courseId, isActive: true });
+      const isEnrolled = await require('../models/Enrollment').findOne({ 
+        user: req.user._id, 
+        course: courseId, 
+        $or: [{ isActive: true }, { paymentStatus: 'paid' }] 
+      });
       if (!isEnrolled) {
         return res.status(403).json({ success: false, message: 'Access denied: You are not enrolled in this course.' });
       }
