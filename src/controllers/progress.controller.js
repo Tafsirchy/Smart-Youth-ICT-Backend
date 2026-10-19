@@ -10,7 +10,11 @@ exports.getProgress = async (req, res, next) => {
     const { courseId } = req.params;
     
     // Check enrollment
-    const enrollment = await Enrollment.findOne({ user: req.user._id, course: courseId, isActive: true });
+    const enrollment = await Enrollment.findOne({ 
+      user: req.user._id, 
+      course: courseId, 
+      $or: [{ isActive: true }, { paymentStatus: 'paid' }] 
+    });
     if (!enrollment) {
       return res.status(403).json({ success: false, message: 'You are not enrolled in this course.' });
     }
