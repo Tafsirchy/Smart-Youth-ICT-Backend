@@ -2,13 +2,24 @@ const Requisition = require('../models/Requisition');
 const Branch = require('../models/Branch');
 const { resolveBranchId } = require('../utils/branchHelper');
 
+// Allowed forward transitions for HQ-managed status updates
+const ALLOWED_TRANSITIONS = {
+  pending: ['under_review', 'approved', 'rejected'],
+  under_review: ['approved', 'rejected'],
+  approved: ['dispatched', 'rejected'],
+  dispatched: ['rejected'],
+  received: [],
+  rejected: []
+};
+
 // @desc    Get requisitions list (Branch scoped for manager, global for super admin)
 // @route   GET /api/requisitions
 // @access  Private (branch_admin, branch_management, super_admin, super_management, employee)
 exports.getRequisitions = async (req, res, next) => {
   try {
     const isSuper = ['super_admin', 'super_management'].includes(req.user.role);
-    const branchId = resolveBranchId(req, req.query.branchId);
+    const rawBranch = req.query.branchId;
+    const branchId = resolveBranchId(req, rawBranch);
 
     const filter = {};
     if (!isSuper) {
@@ -16,8 +27,11 @@ exports.getRequisitions = async (req, res, next) => {
         return res.status(400).json({ success: false, message: 'Branch context required' });
       }
       filter.branchId = branchId;
-    } else if (req.query.branchId && req.query.branchId !== 'all') {
-      filter.branchId = req.query.branchId;
+    } else if (rawBranch && rawBranch !== 'all') {
+      if (!branchId) {
+        return res.status(400).json({ success: false, message: 'Invalid branchId' });
+      }
+      filter.branchId = branchId;
     }
 
     if (req.query.status && req.query.status !== 'all') {
@@ -85,33 +99,56 @@ exports.createRequisition = async (req, res, next) => {
     }
 
     const branchCode = (branch.code || 'HQ').toUpperCase();
-    const count = await Requisition.countDocuments({ branchId: targetBranchId });
     const year = new Date().getFullYear();
-    const requisitionNumber = `REQ-${year}-${branchCode}-${String(count + 1).padStart(4, '0')}`;
 
-    const requisition = await Requisition.create({
-      requisitionNumber,
-      branchId: targetBranchId,
-      requestedBy: req.user._id,
-      title: title.trim(),
-      items: items.map(item => ({
-        itemName: item.itemName.trim(),
-        category: item.category || 'stationery',
-        quantity: Math.max(1, Number(item.quantity) || 1),
-        unit: item.unit || 'pcs',
-        notes: item.notes?.trim() || ''
-      })),
-      urgency: urgency || 'normal',
-      purpose: purpose?.trim() || '',
-      status: 'pending',
-      statusHistory: [
-        {
+    const buildNumber = (seq) => `REQ-${year}-${branchCode}-${String(seq).padStart(4, '0')}`;
+
+    // Base sequence from an existing count; unique index + retry resolves concurrent races
+    const baseCount = await Requisition.countDocuments({ branchId: targetBranchId });
+
+    let requisition = null;
+    let lastErr = null;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        requisition = await Requisition.create({
+          requisitionNumber: buildNumber(baseCount + 1 + attempt),
+          branchId: targetBranchId,
+          requestedBy: req.user._id,
+          title: title.trim(),
+          items: items.map(item => ({
+            itemName: item.itemName.trim(),
+            category: item.category || 'stationery',
+            quantity: Math.max(1, Number(item.quantity) || 1),
+            unit: item.unit || 'pcs',
+            notes: item.notes?.trim() || ''
+          })),
+          urgency: urgency || 'normal',
+          purpose: purpose?.trim() || '',
           status: 'pending',
-          updatedBy: req.user._id,
-          note: 'Requisition ticket submitted to Central HQ'
+          statusHistory: [
+            {
+              status: 'pending',
+              updatedBy: req.user._id,
+              note: 'Requisition ticket submitted to Central HQ'
+            }
+          ]
+        });
+        break;
+      } catch (err) {
+        // Retry only on duplicate-key collisions
+        if (err && err.code === 11000) {
+          lastErr = err;
+          continue;
         }
-      ]
-    });
+        throw err;
+      }
+    }
+
+    if (!requisition) {
+      return next(lastErr || new Error('Failed to generate a unique requisition number'));
+    }
+
+    const requisitionNumber = requisition.requisitionNumber;
 
     const populated = await Requisition.findById(requisition._id)
       .populate('branchId', 'name code city')
@@ -142,6 +179,14 @@ exports.updateRequisitionStatus = async (req, res, next) => {
     const validStatuses = ['under_review', 'approved', 'dispatched', 'rejected'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ success: false, message: 'Invalid status transition' });
+    }
+
+    const allowed = ALLOWED_TRANSITIONS[requisition.status] || [];
+    if (!allowed.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot move requisition from "${requisition.status}" to "${status}"`
+      });
     }
 
     requisition.status = status;
