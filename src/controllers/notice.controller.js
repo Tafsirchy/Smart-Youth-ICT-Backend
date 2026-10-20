@@ -17,7 +17,10 @@ exports.getPublicCampusNotices = async (req, res, next) => {
           { code: branchId.toLowerCase() }
         ]
       });
-      if (branch) targetBranchId = branch._id;
+      if (!branch) {
+        return res.status(404).json({ success: false, message: 'Branch not found' });
+      }
+      targetBranchId = branch._id;
     }
 
     const now = new Date();
@@ -100,7 +103,8 @@ exports.getStudentNotices = async (req, res, next) => {
 exports.getAdminNotices = async (req, res, next) => {
   try {
     const isSuper = ['super_admin', 'super_management'].includes(req.user.role);
-    const branchId = resolveBranchId(req, req.query.branchId);
+    const rawBranch = req.query.branchId;
+    const branchId = resolveBranchId(req, rawBranch);
 
     const filter = {};
     if (!isSuper) {
@@ -108,8 +112,11 @@ exports.getAdminNotices = async (req, res, next) => {
         { branchId: branchId },
         { branchId: null }
       ];
-    } else if (req.query.branchId && req.query.branchId !== 'all') {
-      filter.branchId = req.query.branchId;
+    } else if (rawBranch && rawBranch !== 'all') {
+      if (!branchId) {
+        return res.status(400).json({ success: false, message: 'Invalid branchId' });
+      }
+      filter.branchId = branchId;
     }
 
     if (req.query.category && req.query.category !== 'all') {
@@ -282,6 +289,11 @@ exports.togglePinNotice = async (req, res, next) => {
     const notice = await BranchNotice.findById(req.params.id);
     if (!notice) {
       return res.status(404).json({ success: false, message: 'Notice not found' });
+    }
+
+    const isSuper = ['super_admin', 'super_management'].includes(req.user.role);
+    if (!isSuper && notice.branchId && notice.branchId.toString() !== req.user.branchId?.toString()) {
+      return res.status(403).json({ success: false, message: 'Access denied: Notice belongs to another branch' });
     }
 
     notice.isPinned = !notice.isPinned;
