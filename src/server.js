@@ -55,6 +55,7 @@ const routineRoutes = require('./routes/classSchedule.routes');
 const couponRoutes = require('./routes/coupon.routes');
 const noticeRoutes = require('./routes/notice.routes');
 const requisitionRoutes = require('./routes/requisition.routes');
+const auditRoutes = require('./routes/audit.routes');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -189,6 +190,7 @@ app.use(`${API}/sessions`, sessionRoutes);
 app.use(`${API}/assets`, assetRoutes);
 app.use(`${API}/invoices`, invoiceRoutes);
 app.use(`${API}/notifications`, notificationRoutes);
+app.use(`${API}/super/audit`, auditRoutes);
 app.use(`${API}/super`, superRoutes);
 app.use(`${API}/cms`, cmsRoutes);
 app.use(`${API}/support`, supportRoutes);
