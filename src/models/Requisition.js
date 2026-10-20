@@ -34,7 +34,6 @@ const RequisitionSchema = new mongoose.Schema(
       required: true,
       unique: true,
       uppercase: true,
-      index: true,
     },
     branchId: {
       type: mongoose.Schema.Types.ObjectId,
