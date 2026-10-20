@@ -815,56 +815,86 @@ exports.getBranchLeaderboardAnalytics = async (req, res, next) => {
     const CounselingSession = require('../models/CounselingSession');
 
     const branches = await Branch.find({ isActive: true })
-      .select('name code city address phone email')
+      .select('name code city address phone email logo')
       .lean();
 
-    const branchAnalytics = await Promise.all(
-      branches.map(async (b) => {
-        const [studentCount, revenueAgg, expenseAgg, counselingAgg, activeCourses] = await Promise.all([
-          User.countDocuments({ branchId: b._id, role: 'student' }),
-          Payment.aggregate([
-            { $match: { branchId: b._id, status: 'completed' } },
-            { $group: { _id: null, total: { $sum: '$amount' } } }
-          ]),
-          Expense.aggregate([
-            { $match: { branchId: b._id, status: 'approved' } },
-            { $group: { _id: null, total: { $sum: '$amount' } } }
-          ]),
-          CounselingSession.aggregate([
-            { $match: { branchId: b._id } },
-            {
-              $facet: {
-                total: [{ $count: 'count' }],
-                converted: [{ $match: { status: 'enrolled' } }, { $count: 'count' }]
-              }
-            }
-          ]),
-          Course.countDocuments({ branchId: b._id, isActive: true })
-        ]);
+    const branchIds = branches.map((b) => b._id);
 
-        const revenue = revenueAgg[0]?.total || 0;
-        const expenses = expenseAgg[0]?.total || 0;
-        const netMargin = revenue - expenses;
-        const totalLeads = counselingAgg[0]?.total[0]?.count || 0;
-        const convertedLeads = counselingAgg[0]?.converted[0]?.count || 0;
-        const conversionRate = totalLeads > 0 ? Math.round((convertedLeads / totalLeads) * 100) : 0;
+    // Consolidated grouped aggregations — one query per metric instead of per-branch loops
+    const [studentAgg, revenueAgg, expenseAgg, counselingAgg, courseAgg] = await Promise.all([
+      User.aggregate([
+        { $match: { branchId: { $in: branchIds }, role: 'student' } },
+        { $group: { _id: '$branchId', count: { $sum: 1 } } }
+      ]),
+      Payment.aggregate([
+        { $match: { branchId: { $in: branchIds }, status: 'completed' } },
+        { $group: { _id: '$branchId', total: { $sum: '$amount' } } }
+      ]),
+      Expense.aggregate([
+        { $match: { branchId: { $in: branchIds }, status: 'approved' } },
+        { $group: { _id: '$branchId', total: { $sum: '$amount' } } }
+      ]),
+      CounselingSession.aggregate([
+        { $match: { branchId: { $in: branchIds } } },
+        {
+          $group: {
+            _id: '$branchId',
+            total: { $sum: 1 },
+            converted: { $sum: { $cond: [{ $eq: ['$status', 'enrolled'] }, 1, 0] } }
+          }
+        }
+      ]),
+      Course.aggregate([
+        { $match: { branchId: { $in: branchIds }, isActive: true } },
+        { $group: { _id: '$branchId', count: { $sum: 1 } } }
+      ])
+    ]);
 
-        return {
-          _id: b._id,
-          name: b.name,
-          code: b.code,
-          city: b.city,
-          studentCount,
-          revenue,
-          expenses,
-          netMargin,
-          activeCourses,
-          totalLeads,
-          convertedLeads,
-          conversionRate
-        };
-      })
-    );
+    const toMap = (rows, key = 'total') =>
+      rows.reduce((acc, r) => {
+        acc[r._id.toString()] = key === 'count' ? r.count : r.total;
+        return acc;
+      }, {});
+    const toCountMap = (rows) =>
+      rows.reduce((acc, r) => {
+        acc[r._id.toString()] = r.count;
+        return acc;
+      }, {});
+
+    const studentMap = toCountMap(studentAgg);
+    const revenueMap = toMap(revenueAgg);
+    const expenseMap = toMap(expenseAgg);
+    const courseMap = toCountMap(courseAgg);
+    const counselingMap = counselingAgg.reduce((acc, r) => {
+      acc[r._id.toString()] = { total: r.total, converted: r.converted };
+      return acc;
+    }, {});
+
+    const branchAnalytics = branches.map((b) => {
+      const key = b._id.toString();
+      const revenue = revenueMap[key] || 0;
+      const expenses = expenseMap[key] || 0;
+      const netMargin = revenue - expenses;
+      const totalLeads = counselingMap[key]?.total || 0;
+      const convertedLeads = counselingMap[key]?.converted || 0;
+      const conversionRate = totalLeads > 0 ? Math.round((convertedLeads / totalLeads) * 100) : 0;
+
+      return {
+        _id: b._id,
+        name: b.name,
+        code: b.code,
+        city: b.city,
+        logo: b.logo || null,
+        studentCount: studentMap[key] || 0,
+        revenue,
+        expenses,
+        netMargin,
+        activeCourses: courseMap[key] || 0,
+        totalLeads,
+        convertedLeads,
+        conversionRate
+      };
+    });
 
     // Sort by revenue descending for leaderboard ranking
     branchAnalytics.sort((a, b) => b.revenue - a.revenue);
