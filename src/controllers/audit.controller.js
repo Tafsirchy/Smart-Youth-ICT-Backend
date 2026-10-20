@@ -535,8 +535,12 @@ exports.getBranchComprehensiveAuditReport = async (req, res, next) => {
           const trainerSame = r1.trainer?._id && r2.trainer?._id && String(r1.trainer._id) === String(r2.trainer._id);
 
           if (roomSame || trainerSame) {
-            // Check time overlap: (StartA < EndB) and (EndA > StartB)
-            if (r1.startTime < r2.endTime && r1.endTime > r2.startTime) {
+            // Check time overlap using minute precision: (StartA < EndB) and (EndA > StartB)
+            const toMinutes = (t) => {
+              const [h, m] = String(t || '').split(':').map(Number);
+              return (h || 0) * 60 + (m || 0);
+            };
+            if (toMinutes(r1.startTime) < toMinutes(r2.endTime) && toMinutes(r1.endTime) > toMinutes(r2.startTime)) {
               routineConflicts.push({
                 type: roomSame ? 'room_double_booked' : 'trainer_double_booked',
                 dayOfWeek: r1.dayOfWeek,
