@@ -23,6 +23,16 @@ function timeToMinutes(str) {
   return (h || 0) * 60 + (m || 0);
 }
 
+function escapeRegex(str) {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+const TIME_FORMAT_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+function isValidTime(str) {
+  return TIME_FORMAT_REGEX.test(String(str || ''));
+}
+
 function checkTimeOverlap(startA, endA, startB, endB) {
   const aS = timeToMinutes(startA);
   const aE = timeToMinutes(endA);
@@ -61,7 +71,7 @@ async function checkScheduleConflicts({ branchId, trainerId, roomOrLab, dayOfWee
   }
 
   // 2. Room/Lab Collision Check (within the same branch)
-  const roomRegex = new RegExp(`^${roomOrLab.trim()}$`, 'i');
+  const roomRegex = new RegExp(`^${escapeRegex(roomOrLab.trim())}$`, 'i');
   const roomSchedules = await ClassSchedule.find({
     ...query,
     branchId,
@@ -110,9 +120,9 @@ exports.getSchedules = async (req, res, next) => {
     if (req.query.search) {
       const q = String(req.query.search).trim();
       filter.$or = [
-        { batchName: { $regex: q, $options: 'i' } },
-        { roomOrLab: { $regex: q, $options: 'i' } },
-        { notes: { $regex: q, $options: 'i' } }
+        { batchName: { $regex: escapeRegex(q), $options: 'i' } },
+        { roomOrLab: { $regex: escapeRegex(q), $options: 'i' } },
+        { notes: { $regex: escapeRegex(q), $options: 'i' } }
       ];
     }
 
@@ -192,6 +202,13 @@ exports.createSchedule = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Batch name, course, trainer, day, start/end time and room are required' });
     }
 
+    if (!isValidTime(startTime) || !isValidTime(endTime)) {
+      return res.status(400).json({ success: false, message: 'Start and end time must be in HH:MM format (24h)' });
+    }
+    if (timeToMinutes(endTime) <= timeToMinutes(startTime)) {
+      return res.status(400).json({ success: false, message: 'End time must be after start time' });
+    }
+
     // Run Conflict Detection
     const conflict = await checkScheduleConflicts({
       branchId,
@@ -246,12 +263,30 @@ exports.updateSchedule = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Unauthorized branch access' });
     }
 
-    const branchId = req.body.branchId ? await resolveBranchId(req.body.branchId) : schedule.branchId;
-    const trainerId = req.body.trainer || schedule.trainer;
-    const roomOrLab = req.body.roomOrLab || schedule.roomOrLab;
-    const dayOfWeek = req.body.dayOfWeek || schedule.dayOfWeek;
-    const startTime = req.body.startTime || schedule.startTime;
-    const endTime = req.body.endTime || schedule.endTime;
+    let branchId = schedule.branchId;
+    if (req.body.branchId) {
+      const requestedBranchId = await resolveBranchId(req.body.branchId);
+      if (!requestedBranchId) {
+        return res.status(400).json({ success: false, message: 'Valid Branch ID required' });
+      }
+      if (!isSuper && requestedBranchId.toString() !== schedule.branchId.toString()) {
+        return res.status(403).json({ success: false, message: 'Unauthorized branch access' });
+      }
+      branchId = requestedBranchId;
+    }
+
+    const trainerId = req.body.trainer ?? schedule.trainer;
+    const roomOrLab = req.body.roomOrLab ?? schedule.roomOrLab;
+    const dayOfWeek = req.body.dayOfWeek ?? schedule.dayOfWeek;
+    const startTime = req.body.startTime ?? schedule.startTime;
+    const endTime = req.body.endTime ?? schedule.endTime;
+
+    if (!isValidTime(startTime) || !isValidTime(endTime)) {
+      return res.status(400).json({ success: false, message: 'Start and end time must be in HH:MM format (24h)' });
+    }
+    if (timeToMinutes(endTime) <= timeToMinutes(startTime)) {
+      return res.status(400).json({ success: false, message: 'End time must be after start time' });
+    }
 
     // Run Conflict Detection excluding current schedule ID
     const conflict = await checkScheduleConflicts({
@@ -273,7 +308,15 @@ exports.updateSchedule = async (req, res, next) => {
       });
     }
 
-    const updated = await ClassSchedule.findByIdAndUpdate(req.params.id, req.body, { new: true })
+    const allowed = ['batchName', 'course', 'trainer', 'dayOfWeek', 'startTime', 'endTime', 'roomOrLab', 'meetingLink', 'notes'];
+    const updates = { branchId };
+    allowed.forEach(field => {
+      if (req.body[field] !== undefined && req.body[field] !== null) {
+        updates[field] = req.body[field];
+      }
+    });
+
+    const updated = await ClassSchedule.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true })
       .populate('trainer', 'name email avatar role')
       .populate('course', 'title thumbnail')
       .populate('branchId', 'name code slug');

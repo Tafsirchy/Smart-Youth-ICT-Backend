@@ -12,8 +12,18 @@ const ClassScheduleSchema = new mongoose.Schema(
       required: true,
       index: true 
     },
-    startTime:   { type: String, required: true, trim: true }, // "10:00" (24-hour format HH:MM)
-    endTime:     { type: String, required: true, trim: true }, // "12:00" (24-hour format HH:MM)
+    startTime:   { 
+      type: String, 
+      required: true, 
+      trim: true,
+      match: [/^([01]\d|2[0-3]):[0-5]\d$/, 'startTime must be in HH:MM (24-hour) format']
+    }, // "10:00" (24-hour format HH:MM)
+    endTime:     { 
+      type: String, 
+      required: true, 
+      trim: true,
+      match: [/^([01]\d|2[0-3]):[0-5]\d$/, 'endTime must be in HH:MM (24-hour) format']
+    }, // "12:00" (24-hour format HH:MM)
     roomOrLab:   { type: String, required: true, trim: true, index: true }, // "Lab 1", "Room 204", "Online Zoom"
     meetingLink: { type: String, trim: true },
     notes:       { type: String, trim: true },
