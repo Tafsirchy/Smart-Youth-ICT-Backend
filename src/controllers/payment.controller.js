@@ -8,6 +8,34 @@ const nagadService = require('../services/payment/nagad.service');
 const whatsappService = require('../services/whatsapp.service');
 const smsService      = require('../services/sms.service');
 const emailService    = require('../services/email.service');
+const { validateCouponForAmount, consumeCouponUsage } = require('../services/coupon.service');
+
+/**
+ * Redeem a coupon referenced by a completed payment exactly once.
+ * Failures are logged, never blocking fulfillment.
+ */
+const redeemPaymentCoupon = async (payment) => {
+  if (!payment || !payment.coupon || payment.couponRedeemed) return;
+  try {
+    const claimed = await Payment.findOneAndUpdate(
+      { _id: payment._id, couponRedeemed: { $ne: true } },
+      { $set: { couponRedeemed: true } },
+      { new: true }
+    );
+    if (!claimed) return;
+    const consumed = await consumeCouponUsage({
+      couponId: claimed.coupon,
+      discountAmount: claimed.discountAmount,
+      revenueAmount: claimed.amount
+    });
+    if (!consumed) {
+      console.warn(`[Coupon] Usage limit reached at redemption for payment ${claimed._id} (${claimed.couponCode})`);
+    }
+  } catch (err) {
+    console.error('[Coupon] Redemption error:', err.message);
+  }
+};
+
 
 /**
  * @desc    Initialize a checkout session for a course
@@ -16,15 +44,33 @@ const emailService    = require('../services/email.service');
  */
 const initializeCheckout = async (req, res, next) => {
   try {
-    const { courseId, paymentMethod, isInstallment } = req.body;
+    const { courseId, paymentMethod, isInstallment, couponCode } = req.body;
     const user = req.user;
 
     const course = await Course.findById(courseId);
     if (!course) return res.status(404).json({ success: false, message: 'Course not found' });
 
-    // Amount calculation logic
-    // Simplified: Full amount for now
-    const amount = Number(course.price);
+    // Amount calculation logic — server-side only; client amounts are never trusted
+    const originalAmount = Number(course.price);
+    let amount = originalAmount;
+    let coupon = null;
+    let discountAmount = 0;
+
+    if (couponCode) {
+      const couponCheck = await validateCouponForAmount({
+        code: couponCode,
+        amount: originalAmount,
+        courseId: courseId.toString(),
+        branchId: user.branchId
+      });
+      if (!couponCheck.ok) {
+        return res.status(couponCheck.status).json({ success: false, message: couponCheck.message });
+      }
+      coupon = couponCheck.coupon;
+      discountAmount = couponCheck.discountAmount;
+      amount = couponCheck.finalAmount;
+    }
+
     const invoiceNumber = `INV-${Date.now()}-${user._id.toString().slice(-4)}`;
 
     // Create a pending Payment record
@@ -34,6 +80,10 @@ const initializeCheckout = async (req, res, next) => {
       branchId: user.branchId, // 🛡️ Security Fix: Link payment to branch for isolation
       method: paymentMethod, 
       amount,
+      originalAmount,
+      discountAmount,
+      coupon: coupon ? coupon._id : undefined,
+      couponCode: coupon ? coupon.code : undefined,
       status: 'pending',
       transactionId: invoiceNumber 
     });
@@ -161,6 +211,9 @@ const stripeWebhook = async (req, res) => {
       });
 
       if (payment) {
+        // 1b. Redeem coupon usage (exactly once)
+        await redeemPaymentCoupon(payment);
+
         // 2. Create actual Enrollment record
         await Enrollment.findOneAndUpdate(
           { user: payment.user, course: payment.course },
@@ -207,6 +260,8 @@ const bkashCallback = async (req, res, next) => {
           payment.status = 'completed';
           payment.transactionId = result.trxID;
           await payment.save();
+
+          await redeemPaymentCoupon(payment);
 
           await Enrollment.findOneAndUpdate(
             { user: payment.user, course: payment.course },
@@ -259,6 +314,8 @@ const nagadCallback = async (req, res, next) => {
           payment.status = 'completed';
           await payment.save();
 
+          await redeemPaymentCoupon(payment);
+
           await Enrollment.findOneAndUpdate(
             { user: payment.user, course: payment.course },
             { paymentStatus: 'paid', branchId: payment.branchId },
@@ -292,5 +349,6 @@ module.exports = {
   stripeWebhook,
   getPayments,
   bkashCallback,
-  nagadCallback
+  nagadCallback,
+  redeemPaymentCoupon
 };

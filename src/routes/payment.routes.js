@@ -8,12 +8,14 @@ const { PERMISSIONS } = require('../config/permissions');
 const Payment    = require('../models/Payment');
 const Enrollment = require('../models/Enrollment');
 const Course     = require('../models/Course');
+const { validateCouponForAmount } = require('../services/coupon.service');
 const { 
   initializeCheckout, 
   stripeWebhook, 
   getPayments, 
   bkashCallback, 
-  nagadCallback 
+  nagadCallback,
+  redeemPaymentCoupon
 } = require('../controllers/payment.controller');
 
 // ─────────────────────────────────────────────────────────
@@ -49,13 +51,37 @@ router.post('/manual/submit', protect, handleSlipUpload, async (req, res, next) 
     }
     const amount = (rawAmount !== undefined && rawAmount !== null && rawAmount !== '') ? Number(rawAmount) : null;
     const method = body.method ? String(body.method).toLowerCase().trim() : '';
-    const transactionId = body.transactionId ? String(body.transactionId).trim() : '';
-    const senderNumber = body.senderNumber ? String(body.senderNumber).trim() : '';
-    const bankName = body.bankName ? String(body.bankName).trim() : '';
+    const transactionId = String(body.transactionId || '').trim();
+    const senderNumber = String(body.senderNumber || '').trim();
+    const bankName = String(body.bankName || '').trim();
+    const couponCode = String(body.couponCode || '').trim();
     let slipUrl = body.slipUrl;
 
     if (!courseId || amount === null || isNaN(amount) || !method) {
       return res.status(400).json({ success: false, message: 'Course ID, amount, and payment method are required' });
+    }
+
+    // Server-side coupon application — client amount is never trusted when a coupon is used
+    let coupon = null;
+    let discountAmount = 0;
+    let originalAmount = null;
+    if (couponCode) {
+      const courseDoc = await Course.findById(courseId);
+      if (!courseDoc) {
+        return res.status(404).json({ success: false, message: 'Course not found' });
+      }
+      originalAmount = Number(courseDoc.price);
+      const couponCheck = await validateCouponForAmount({
+        code: couponCode,
+        amount: originalAmount,
+        courseId: courseId.toString(),
+        branchId: body.branchId || req.user.branchId
+      });
+      if (!couponCheck.ok) {
+        return res.status(couponCheck.status).json({ success: false, message: couponCheck.message });
+      }
+      coupon = couponCheck.coupon;
+      discountAmount = couponCheck.discountAmount;
     }
 
     if (req.file) {
@@ -84,12 +110,18 @@ router.post('/manual/submit', protect, handleSlipUpload, async (req, res, next) 
       if (course && course.branchId) targetBranchId = course.branchId;
     }
 
+    const finalAmount = coupon ? Math.max(0, originalAmount - discountAmount) : amount;
+
     const payment = await Payment.create({
       user: req.user._id, 
       course: courseId,
       branchId: targetBranchId || undefined,
       method: method || 'bank', 
-      amount: amount,
+      amount: finalAmount,
+      originalAmount: coupon ? originalAmount : undefined,
+      discountAmount: coupon ? discountAmount : 0,
+      coupon: coupon ? coupon._id : undefined,
+      couponCode: coupon ? coupon.code : undefined,
       transactionId,
       senderNumber,
       bankName,
@@ -143,6 +175,9 @@ router.put('/:id/verify', protect, requireAccess(PERMISSIONS.PAYMENTS_VERIFY), a
     await payment.save();
     
     if (status === 'completed') {
+      // Redeem coupon usage (exactly once)
+      await redeemPaymentCoupon(payment);
+
       // Activate enrollment
       await Enrollment.findOneAndUpdate(
         { user: payment.user, course: payment.course },
