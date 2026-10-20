@@ -749,16 +749,13 @@ exports.deleteBranchStaff = async (req, res, next) => {
 exports.verifyStudentPublic = async (req, res, next) => {
   try {
     const { studentId } = req.params;
-    let query = null;
-    if (mongoose.Types.ObjectId.isValid(studentId)) {
-      query = { _id: studentId };
-    } else {
+    if (!mongoose.Types.ObjectId.isValid(studentId)) {
       return res.status(400).json({ success: false, message: 'Invalid Student ID format' });
     }
 
-    const user = await User.findOne(query)
+    const user = await User.findOne({ _id: studentId, role: 'student' })
       .select('name avatar role branchId createdAt isActive isVerified')
-      .populate('branchId', 'name code city address phone');
+      .populate('branchId', 'name code city');
 
     if (!user) {
       return res.status(404).json({
@@ -770,7 +767,7 @@ exports.verifyStudentPublic = async (req, res, next) => {
     const Enrollment = require('../models/Enrollment');
     const enrollments = await Enrollment.find({ user: user._id, isActive: true })
       .populate('course', 'title thumbnail')
-      .select('course createdAt paymentStatus');
+      .select('course createdAt');
 
     const formattedStudentId = `SYICT-${user.branchId?.code || 'HQ'}-${user._id.toString().slice(-6).toUpperCase()}`;
 
@@ -783,13 +780,12 @@ exports.verifyStudentPublic = async (req, res, next) => {
         studentId: formattedStudentId,
         role: user.role,
         branch: user.branchId,
-        isVerified: user.isVerified || user.isActive,
+        isVerified: Boolean(user.isVerified),
         enrollmentCount: enrollments.length,
         courses: enrollments.map(e => ({
           title: e.course?.title,
           thumbnail: e.course?.thumbnail,
-          enrolledAt: e.createdAt,
-          paymentStatus: e.paymentStatus
+          enrolledAt: e.createdAt
         })),
         memberSince: user.createdAt
       }
