@@ -1,6 +1,7 @@
 const Coupon = require('../models/Coupon');
 const Branch = require('../models/Branch');
 const { resolveBranchId } = require('../utils/branchHelper');
+const { validateCouponForAmount } = require('../services/coupon.service');
 
 // @desc    Validate coupon and calculate discount (Public for checkout & preview)
 // @route   POST /api/coupons/validate
@@ -9,89 +10,19 @@ exports.validateCouponPublic = async (req, res, next) => {
   try {
     const { code, courseId, branchId, originalAmount } = req.body;
 
-    if (!code) {
-      return res.status(400).json({ success: false, message: 'Please provide a coupon code' });
+    const result = await validateCouponForAmount({
+      code,
+      amount: Number(originalAmount) || 0,
+      courseId,
+      branchId
+    });
+
+    if (!result.ok) {
+      return res.status(result.status).json({ success: false, message: result.message });
     }
 
+    const { coupon, discountAmount, finalAmount } = result;
     const numAmount = Number(originalAmount) || 0;
-    const cleanCode = String(code).trim().toUpperCase();
-
-    const coupon = await Coupon.findOne({ code: cleanCode, isActive: true })
-      .populate('branchId', 'name code city');
-
-    if (!coupon) {
-      return res.status(404).json({ success: false, message: 'Invalid or inactive coupon code' });
-    }
-
-    const now = new Date();
-
-    // 1. Check validity dates
-    if (coupon.validFrom && now < new Date(coupon.validFrom)) {
-      return res.status(400).json({ success: false, message: 'This promo code is not active yet' });
-    }
-    if (coupon.validUntil && now > new Date(coupon.validUntil)) {
-      return res.status(400).json({ success: false, message: 'This promo code has expired' });
-    }
-
-    // 2. Check usage limit
-    if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) {
-      return res.status(400).json({ success: false, message: 'Coupon usage limit has been reached' });
-    }
-
-    // 3. Check Branch-specific restriction
-    if (coupon.branchId) {
-      if (!branchId) {
-        return res.status(400).json({
-          success: false,
-          message: `This promo code is exclusively reserved for ${coupon.branchId.name || 'a specific branch'}.`
-        });
-      }
-
-      // Check if branchId matches either ObjectId or branch code
-      const targetBranchIdStr = coupon.branchId._id.toString();
-      const targetBranchCode = coupon.branchId.code?.toLowerCase();
-      const providedBranch = String(branchId).toLowerCase();
-
-      const isMatch = targetBranchIdStr === branchId || targetBranchCode === providedBranch;
-      if (!isMatch) {
-        return res.status(400).json({
-          success: false,
-          message: `This coupon is only valid for the ${coupon.branchId.name} branch.`
-        });
-      }
-    }
-
-    // 4. Check applicable courses
-    if (coupon.applicableCourses && coupon.applicableCourses.length > 0) {
-      if (!courseId || !coupon.applicableCourses.map(c => c.toString()).includes(courseId.toString())) {
-        return res.status(400).json({
-          success: false,
-          message: 'This coupon is not applicable to the selected course.'
-        });
-      }
-    }
-
-    // 5. Check minimum order amount
-    if (coupon.minPurchaseAmount > 0 && numAmount < coupon.minPurchaseAmount) {
-      return res.status(400).json({
-        success: false,
-        message: `Minimum purchase amount of ৳${coupon.minPurchaseAmount.toLocaleString()} required for this coupon.`
-      });
-    }
-
-    // 6. Calculate discount
-    let discountAmount = 0;
-    if (coupon.discountType === 'percentage') {
-      discountAmount = Math.round((numAmount * coupon.discountValue) / 100);
-      if (coupon.maxDiscountAmount > 0) {
-        discountAmount = Math.min(discountAmount, coupon.maxDiscountAmount);
-      }
-    } else {
-      // Fixed discount in BDT
-      discountAmount = Math.min(coupon.discountValue, numAmount);
-    }
-
-    const finalAmount = Math.max(0, numAmount - discountAmount);
 
     res.json({
       success: true,
@@ -118,7 +49,8 @@ exports.validateCouponPublic = async (req, res, next) => {
 exports.getCoupons = async (req, res, next) => {
   try {
     const isSuper = ['super_admin', 'super_management'].includes(req.user.role);
-    const branchId = resolveBranchId(req, req.query.branchId);
+    const rawBranch = req.query.branchId;
+    const branchId = resolveBranchId(req, rawBranch);
 
     const filter = {};
     if (!isSuper) {
@@ -126,8 +58,11 @@ exports.getCoupons = async (req, res, next) => {
         { branchId: branchId },
         { branchId: null } // Branch admin can see global HQ coupons too
       ];
-    } else if (req.query.branchId && req.query.branchId !== 'all') {
-      filter.branchId = req.query.branchId;
+    } else if (rawBranch && rawBranch !== 'all') {
+      if (!branchId) {
+        return res.status(400).json({ success: false, message: 'Invalid branchId' });
+      }
+      filter.branchId = branchId;
     }
 
     const coupons = await Coupon.find(filter)
@@ -315,6 +250,11 @@ exports.toggleCouponStatus = async (req, res, next) => {
     const coupon = await Coupon.findById(req.params.id);
     if (!coupon) {
       return res.status(404).json({ success: false, message: 'Coupon not found' });
+    }
+
+    const isSuper = ['super_admin', 'super_management'].includes(req.user.role);
+    if (!isSuper && coupon.branchId && coupon.branchId.toString() !== req.user.branchId?.toString()) {
+      return res.status(403).json({ success: false, message: 'Access denied: Belongs to another branch' });
     }
 
     coupon.isActive = !coupon.isActive;
