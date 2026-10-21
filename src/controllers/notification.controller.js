@@ -125,6 +125,30 @@ const buildAudienceConditions = async (user, filterBranchId = null) => {
   };
 };
 
+/**
+ * Compose the "unread" filter on top of an audience query.
+ *
+ * The audience query already carries a top-level `$or` (tenant isolation).
+ * Spreading it and then re-declaring `$or` would silently OVERWRITE those
+ * clauses and leak notifications from other branches, so the two `$or`
+ * groups are combined with `$and` instead.
+ */
+const buildUnreadQuery = (baseQuery, userId) => {
+  const { $or: audienceOr, ...rest } = baseQuery || {};
+  return {
+    ...rest,
+    $and: [
+      ...(Array.isArray(audienceOr) ? [{ $or: audienceOr }] : []),
+      {
+        $or: [
+          { user: userId, isRead: false },
+          { user: null, 'readBy.user': { $ne: userId } },
+        ],
+      },
+    ],
+  };
+};
+
 // @desc    Get current user's notifications (Personal + Segmented Broadcasts)
 // @route   GET /api/notifications
 // @access  Private
@@ -173,12 +197,8 @@ exports.getNotifications = async (req, res, next) => {
         .lean(),
       Notification.countDocuments(query),
       Notification.countDocuments({
-        ...baseQuery,
+        ...buildUnreadQuery(baseQuery, userId),
         ...(category && category !== 'all' ? { category } : {}),
-        $or: [
-          { user: userId, isRead: false },
-          { user: null, 'readBy.user': { $ne: userId } },
-        ],
       }),
     ]);
 
@@ -213,15 +233,7 @@ exports.getUnreadCount = async (req, res, next) => {
     const { _id: userId } = req.user;
     const baseQuery = await buildAudienceConditions(req.user);
 
-    const unreadQuery = {
-      ...baseQuery,
-      $or: [
-        { user: userId, isRead: false },
-        { user: null, 'readBy.user': { $ne: userId } },
-      ],
-    };
-
-    const count = await Notification.countDocuments(unreadQuery);
+    const count = await Notification.countDocuments(buildUnreadQuery(baseQuery, userId));
 
     res.json({
       success: true,
@@ -254,6 +266,19 @@ exports.markAsRead = async (req, res, next) => {
       notification.isRead = true;
       await notification.save();
     } else {
+      // Broadcast: the notification must still be inside the caller's audience,
+      // otherwise any authenticated user could mark (and thereby read) a
+      // broadcast belonging to another branch.
+      const audienceQuery = await buildAudienceConditions(req.user);
+      const isVisible = await Notification.exists({
+        _id: notification._id,
+        $or: audienceQuery.$or,
+      });
+
+      if (!isVisible) {
+        return res.status(403).json({ success: false, message: 'Unauthorized' });
+      }
+
       // Broadcast: Add user to readBy array if not already present
       const alreadyRead = notification.readBy.some(
         (r) => r.user && r.user.toString() === userId.toString()
@@ -290,9 +315,11 @@ exports.markAllAsRead = async (req, res, next) => {
     // 2. Mark matching broadcasts by appending to readBy
     const audienceQuery = await buildAudienceConditions(req.user);
     const broadcastQuery = {
-      ...audienceQuery,
-      user: null,
-      'readBy.user': { $ne: userId },
+      $and: [
+        { $or: audienceQuery.$or },
+        { user: null, 'readBy.user': { $ne: userId } },
+      ],
+      dismissedBy: { $ne: userId },
     };
 
     await Notification.updateMany(broadcastQuery, {
@@ -318,9 +345,14 @@ exports.clearReadNotifications = async (req, res, next) => {
       isRead: true,
     });
 
-    // 2. Dismiss read broadcast notifications for this user
+    // 2. Dismiss read broadcast notifications for this user (audience-scoped)
+    const audienceQuery = await buildAudienceConditions(req.user);
     await Notification.updateMany(
-      { user: null, 'readBy.user': userId },
+      {
+        $or: audienceQuery.$or,
+        user: null,
+        'readBy.user': userId,
+      },
       { $addToSet: { dismissedBy: userId } }
     );
 
