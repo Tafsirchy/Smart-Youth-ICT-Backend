@@ -13,15 +13,19 @@ const {
   initializeCheckout, 
   stripeWebhook, 
   getPayments, 
+  exportPaymentsCSV,
   bkashCallback, 
   nagadCallback,
-  redeemPaymentCoupon
+  redeemPaymentCoupon,
+  replayPaymentWebhook,
 } = require('../controllers/payment.controller');
 
 // ─────────────────────────────────────────────────────────
 // Checkout Routing
 // ─────────────────────────────────────────────────────────
 router.post('/checkout', protect, initializeCheckout);
+router.post('/:id/replay-webhook', protect, requireAccess('super_admin', 'super_management'), replayPaymentWebhook);
+router.get('/export', protect, requireAccess(PERMISSIONS.PAYMENTS_VIEW, PERMISSIONS.PAYMENTS_VERIFY), exportPaymentsCSV);
 router.get('/', protect, requireAccess(PERMISSIONS.PAYMENTS_VIEW, PERMISSIONS.PAYMENTS_VERIFY), getPayments);
 
 // ─────────────────────────────────────────────────────────
