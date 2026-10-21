@@ -4,15 +4,39 @@ let io = null;
 
 /**
  * Initialize Socket.io with HTTP server
+ *
+ * @param {http.Server} httpServer
+ * @param {(origin?: string) => boolean} isAllowedOrigin - decides whether a
+ *   browser origin may open a socket. It is the same check the HTTP layer
+ *   uses, so a socket cannot be opened from an origin the API refuses.
  */
-const initSocket = (httpServer, allowedOrigins) => {
+const initSocket = (httpServer, isAllowedOrigin) => {
   if (io) return io;
 
   io = new Server(httpServer, {
     cors: {
-      origin: allowedOrigins || '*',
+      origin: (origin, callback) => {
+        const allowed =
+          typeof isAllowedOrigin === 'function' ? Boolean(isAllowedOrigin(origin)) : false;
+        callback(null, allowed);
+      },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    },
+    // The cors option above only sets headers on the polling handshake. The
+    // websocket upgrade is not covered by it, so the origin is checked here
+    // as well. Without this a page on any site could open a socket and join
+    // the rooms it asked for.
+    allowRequest: (req, callback) => {
+      const origin = req.headers.origin;
+      const allowed =
+        typeof isAllowedOrigin === 'function' ? Boolean(isAllowedOrigin(origin)) : false;
+
+      if (!allowed) {
+        console.warn('[Socket] Rejected connection from disallowed origin:', origin);
+      }
+
+      callback(null, allowed);
     },
     pingTimeout: 30000,
     pingInterval: 15000,
