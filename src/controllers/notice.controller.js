@@ -1,6 +1,7 @@
 const BranchNotice = require('../models/BranchNotice');
 const Branch = require('../models/Branch');
 const { resolveBranchId } = require('../utils/branchHelper');
+const notificationService = require('../services/notification.service');
 
 // @desc    Get public notices for a specific branch/campus
 // @route   GET /api/notices/public/:branchId
@@ -199,6 +200,46 @@ exports.createNotice = async (req, res, next) => {
     const populated = await BranchNotice.findById(notice._id)
       .populate('branchId', 'name code city')
       .populate('createdBy', 'name email');
+
+    // 🔔 Real-time Notice Notification Broadcast
+    try {
+      const noticeTitle = populated.title;
+      const snippet = populated.content.length > 140 ? `${populated.content.substring(0, 137)}...` : populated.content;
+      const notifPriority = populated.priority === 'urgent' ? 'urgent' : (populated.isPinned ? 'high' : 'normal');
+
+      const noticeLink = populated.targetAudience === 'students'
+        ? '/student/notices'
+        : (['branch_admins', 'branch_admin', 'staff'].includes(populated.targetAudience) ? '/admin/notices' : '/notifications');
+
+      if (!assignedBranchId) {
+        // Global HQ Notice to all branches
+        notificationService.notifyGlobal({
+          title: `📢 HQ Announcement: ${noticeTitle}`,
+          message: snippet,
+          category: 'administrative',
+          priority: notifPriority,
+          type: populated.priority === 'urgent' ? 'error' : 'info',
+          link: noticeLink,
+          actor: req.user._id,
+          metadata: { noticeId: notice._id, audience: populated.targetAudience }
+        }).catch(err => console.error('[Notification notifyGlobal notice failed]', err.message));
+      } else {
+        // Branch-specific Notice
+        notificationService.notifyBranch(assignedBranchId, {
+          title: `📢 Campus Notice: ${noticeTitle}`,
+          message: snippet,
+          category: 'administrative',
+          priority: notifPriority,
+          type: populated.priority === 'urgent' ? 'error' : 'info',
+          link: noticeLink,
+          targetRole: populated.targetAudience === 'students' ? 'student' : (populated.targetAudience === 'instructors' ? 'instructor' : 'all'),
+          actor: req.user._id,
+          metadata: { noticeId: notice._id, branchId: assignedBranchId, branchName: populated.branchId?.name }
+        }).catch(err => console.error('[Notification notifyBranch notice failed]', err.message));
+      }
+    } catch (nErr) {
+      console.error('[Notification createNotice err]', nErr.message);
+    }
 
     res.status(201).json({
       success: true,
