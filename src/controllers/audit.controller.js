@@ -876,3 +876,141 @@ exports.sendBranchAuditAlert = async (req, res, next) => {
     next(err);
   }
 };
+
+/**
+ * @desc    Auto-Enforce Executive Audit Directives based on Branch Health and Risk
+ * @route   POST /api/super/audit/auto-enforce
+ * @access  Private (Super Admin / Super Management)
+ */
+exports.autoEnforceDirectives = async (req, res, next) => {
+  try {
+    const { branchId, forceThreshold = 50 } = req.body;
+
+    let branchQuery = {};
+    if (branchId && branchId !== 'all') {
+      if (!mongoose.Types.ObjectId.isValid(branchId)) {
+        return res.status(400).json({ success: false, message: 'Invalid branch ID' });
+      }
+      branchQuery._id = new mongoose.Types.ObjectId(branchId);
+    }
+
+    const branches = await Branch.find(branchQuery);
+    if (!branches.length) {
+      return res.status(404).json({ success: false, message: 'No target branches found' });
+    }
+
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    const enforcementResults = [];
+
+    for (const b of branches) {
+      // 1. Gather branch current month financial metrics
+      const [revResult] = await Payment.aggregate([
+        { $match: { branchId: b._id, status: 'completed', createdAt: { $gte: monthStart, $lte: monthEnd } } },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
+      ]);
+      const [expResult] = await Expense.aggregate([
+        { $match: { branchId: b._id, status: 'approved', date: { $gte: monthStart, $lte: monthEnd } } },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
+      ]);
+      const [overdueCount] = await Payment.aggregate([
+        { $match: { branchId: b._id, status: 'overdue' } },
+        { $count: 'count' }
+      ]);
+
+      const monthlyRevenue = revResult?.total || 0;
+      const monthlyExpense = expResult?.total || 0;
+      const netProfit = monthlyRevenue - monthlyExpense;
+      const totalOverdue = overdueCount?.count || 0;
+
+      // Compute health score (0 - 100)
+      let score = 70;
+      if (netProfit < 0) score -= 25;
+      if (totalOverdue > 10) score -= 20;
+      else if (totalOverdue > 3) score -= 10;
+      if (monthlyRevenue === 0 && monthlyExpense > 0) score -= 20;
+      score = Math.max(10, Math.min(100, score));
+
+      const isDeficit = netProfit < 0;
+      const isHighRisk = score < forceThreshold;
+
+      if (isHighRisk || isDeficit) {
+        // Enforce Directives:
+        const directiveTitle = isDeficit ? 'Deficit Remediation Protocol' : 'Risk Mitigation Protocol';
+        const directiveContent = "Automated Executive Audit Directive for " + b.name + ":\n" +
+          "• Health Score: " + score + "/100\n" +
+          "• Net Flow: BDT " + monthlyRevenue.toLocaleString('en-US') + " (Revenue) - BDT " + monthlyExpense.toLocaleString('en-US') + " (Expense)\n" +
+          "• Overdue Payments: " + totalOverdue + "\n\n" +
+          "MANDATORY ACTIONS:\n" +
+          "1. Discretionary and unbudgeted capital expenses are immediately frozen.\n" +
+          "2. Branch management must contact all students with overdue payments within 48 hours.\n" +
+          "3. Prepare and submit a financial remediation report to HQ within 5 business days.";
+
+        // 1. In-App Notification
+        await Notification.create({
+          branchId: b._id,
+          title: "[HQ MANDATORY DIRECTIVE] " + b.name,
+          message: directiveContent,
+          type: 'error',
+          targetRole: 'branch_admin'
+        });
+
+        // 2. Urgent Branch Notice pinned
+        await BranchNotice.create({
+          branchId: b._id,
+          title: "🚨 " + directiveTitle,
+          content: directiveContent,
+          category: 'urgent',
+          priority: 'urgent',
+          isPinned: true,
+          targetAudience: 'staff',
+          createdBy: req.user._id
+        });
+
+        // 3. Audit Log
+        await AuditLog.create({
+          user: req.user._id,
+          action: 'HQ_AUDIT_DIRECTIVE_ENFORCED',
+          details: {
+            branchId: b._id,
+            branchName: b.name,
+            score,
+            netProfit,
+            totalOverdue,
+            directiveTitle
+          }
+        });
+
+        enforcementResults.push({
+          branchId: b._id,
+          branchName: b.name,
+          enforced: true,
+          score,
+          netProfit,
+          totalOverdue,
+          action: 'Remediation notice dispatched and logged'
+        });
+      } else {
+        enforcementResults.push({
+          branchId: b._id,
+          branchName: b.name,
+          enforced: false,
+          score,
+          netProfit,
+          totalOverdue,
+          action: 'Branch within healthy risk tolerance'
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Automated directive evaluation executed for ' + branches.length + ' branch(es).',
+      data: enforcementResults
+    });
+  } catch (err) {
+    next(err);
+  }
+};
