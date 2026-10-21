@@ -42,6 +42,16 @@ const protect = async (req, res, next) => {
         .json({ message: "Session expired. Please sign in again." });
     }
 
+    if (decoded.isImpersonating) {
+      req.isImpersonating = true;
+      req.originalAdmin = {
+        id: decoded.originalAdminId,
+        name: decoded.originalAdminName,
+        email: decoded.originalAdminEmail,
+        role: decoded.originalAdminRole,
+      };
+    }
+
     next();
   } catch {
     return res.status(401).json({ message: "Invalid or expired token" });
