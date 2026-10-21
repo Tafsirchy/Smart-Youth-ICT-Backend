@@ -1290,9 +1290,11 @@ exports.getBranchLeaderboardAnalytics = async (req, res, next) => {
 // @access  Private (super_admin, super_management)
 exports.transferStudentBranch = async (req, res, next) => {
   try {
-    const { studentId, toBranchId, reason = '', transferNotes = '' } = req.body;
+    // "toBranchId" is the canonical field; "targetBranchId" is accepted as an alias.
+    const { studentId, toBranchId, targetBranchId, reason = '', transferNotes = '' } = req.body;
+    const destinationBranchId = toBranchId || targetBranchId;
 
-    if (!studentId || !toBranchId) {
+    if (!studentId || !destinationBranchId) {
       return res.status(400).json({
         success: false,
         message: 'Student ID and Destination Branch ID are required',
@@ -1314,13 +1316,13 @@ exports.transferStudentBranch = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Only accounts with the student role can be transferred' });
     }
 
-    const targetBranch = await Branch.findById(toBranchId);
+    const targetBranch = await Branch.findById(destinationBranchId);
     if (!targetBranch) {
       return res.status(404).json({ success: false, message: 'Target destination campus branch not found' });
     }
 
     const fromBranchId = student.branchId;
-    if (fromBranchId && fromBranchId.toString() === toBranchId.toString()) {
+    if (fromBranchId && fromBranchId.toString() === destinationBranchId.toString()) {
       return res.status(400).json({ success: false, message: 'Student is already assigned to this campus branch' });
     }
 
