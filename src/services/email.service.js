@@ -391,6 +391,41 @@ const emailService = {
       subject: `🎓 Your SYICT Student Account is Ready — ${branch}`,
       html: wrapLayout('Student Account Created', content, `Branch: ${branch}`)
     });
+  },
+
+  /**
+   * 🛡️ Two-Factor Authentication (2FA) Security OTP Email (Default 2FA Method)
+   */
+  sendTwoFactorOtp: async (user, otp) => {
+    const content = `
+      <div style="text-align: center; margin-bottom: 25px;">
+        <div style="display: inline-block; width: 64px; height: 64px; line-height: 64px; border-radius: 50%; background: linear-gradient(135deg, #1e1b4b 0%, #db2777 100%); color: #ffffff; font-size: 28px; box-shadow: 0 10px 15px -3px rgba(219, 39, 119, 0.3);">
+          🔒
+        </div>
+        <h2 style="color: #1e1b4b; font-size: 22px; font-weight: 800; margin: 15px 0 5px 0;">Your Security Code</h2>
+        <p style="color: #64748b; font-size: 14px; margin: 0;">Use the 6-digit verification code below to authorize your sign-in to Smart Youth ICT.</p>
+      </div>
+
+      <div style="background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 16px; padding: 30px; text-align: center; margin: 25px 0;">
+        <p style="color: #64748b; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 12px 0;">One-Time Verification Code</p>
+        <div style="display: inline-block; background: #ffffff; border: 2px solid #e2e8f0; border-radius: 12px; padding: 14px 28px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+          <span style="font-family: 'Courier New', Courier, monospace; font-size: 38px; font-weight: 900; letter-spacing: 10px; color: #db2777;">${otp}</span>
+        </div>
+        <p style="color: #94a3b8; font-size: 13px; margin: 15px 0 0 0;">⏱️ This code will automatically expire in <strong>10 minutes</strong>.</p>
+      </div>
+
+      <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 15px 20px; margin: 20px 0;">
+        <p style="color: #991b1b; font-size: 13px; margin: 0; line-height: 1.5;">
+          <strong>Security Warning:</strong> SYICT staff will NEVER ask for this code via phone, chat, or email. If you did not initiate this login request, change your password immediately and contact SYICT Security.
+        </p>
+      </div>
+    `;
+
+    return emailService._send({
+      to: user.email,
+      subject: `🔒 ${otp} is your SYICT Verification Code`,
+      html: wrapLayout('Two-Factor Authentication', content, 'Automated Security Protocol')
+    });
   }
 };
 
