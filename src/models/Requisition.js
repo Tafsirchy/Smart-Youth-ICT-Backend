@@ -20,6 +20,11 @@ const RequisitionItemSchema = new mongoose.Schema({
     type: String,
     default: 'pcs', // pcs, boxes, sets, bundles, rolls
   },
+  warehouseItemId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'WarehouseItem',
+    default: null,
+  },
   notes: {
     type: String,
     trim: true,
@@ -62,6 +67,10 @@ const RequisitionSchema = new mongoose.Schema(
       default: 'pending',
       index: true,
     },
+    stockDeducted: {
+      type: Boolean,
+      default: false,
+    },
     items: [RequisitionItemSchema],
     purpose: {
       type: String,
@@ -83,10 +92,12 @@ const RequisitionSchema = new mongoose.Schema(
       default: null,
     },
     courierInfo: {
-      provider: { type: String, trim: true, default: '' }, // e.g. Sundarban Courier, SA Paribahan, Pathao
+      provider: { type: String, trim: true, default: '' }, // e.g. Sundarban Courier, SA Paribahan, Pathao, Steadfast
       trackingNumber: { type: String, trim: true, default: '' },
       dispatchedDate: { type: Date, default: null },
       receiptSlipUrl: { type: String, trim: true, default: '' },
+      deliveryStatus: { type: String, default: 'pending' }, // pending, in_transit, delivered, returned
+      courierPayload: { type: mongoose.Schema.Types.Mixed, default: null },
     },
     receivedAt: {
       type: Date,
