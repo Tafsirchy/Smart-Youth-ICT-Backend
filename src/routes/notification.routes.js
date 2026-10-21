@@ -1,5 +1,12 @@
 const express = require('express');
-const { getNotifications, markAsRead, createBroadcast } = require('../controllers/notification.controller');
+const {
+  getNotifications,
+  getUnreadCount,
+  markAsRead,
+  markAllAsRead,
+  clearReadNotifications,
+  createBroadcast,
+} = require('../controllers/notification.controller');
 const { protect } = require('../middleware/auth.middleware');
 const { authorize } = require('../middleware/role.middleware');
 
@@ -7,8 +14,18 @@ const router = express.Router();
 
 router.use(protect);
 
-router.get('/',  getNotifications);
-router.patch('/:id/read', markAsRead);
-router.post('/broadcast', authorize('admin', 'branch_admin', 'super_admin'), createBroadcast);
+// User notification feed & counters
+router.get('/',               getNotifications);
+router.get('/unread-count',    getUnreadCount);
+router.patch('/mark-all-read', markAllAsRead);
+router.delete('/clear-read',   clearReadNotifications);
+router.patch('/:id/read',      markAsRead);
+
+// Broadcast dispatcher (Campus & HQ admins)
+router.post(
+  '/broadcast',
+  authorize('branch_admin', 'branch_management', 'super_admin', 'super_management'),
+  createBroadcast
+);
 
 module.exports = router;
