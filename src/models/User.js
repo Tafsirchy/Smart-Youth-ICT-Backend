@@ -72,6 +72,17 @@ const UserSchema = new mongoose.Schema(
     // Staff invite (set-password link)
     inviteToken: String,
     inviteExpiry: Date,
+
+    // Two-Factor Authentication (2FA)
+    twoFactorEnabled: { type: Boolean, default: false, index: true },
+    twoFactorMethod: { type: String, enum: ["email", "authenticator"], default: "email" },
+    twoFactorSecret: { type: String, select: false },
+    twoFactorOtp: { type: String, select: false },
+    twoFactorOtpExpiry: { type: Date, select: false },
+    twoFactorBackupCodes: {
+      type: [{ code: String, used: { type: Boolean, default: false } }],
+      select: false,
+    },
   },
   { timestamps: true },
 );
