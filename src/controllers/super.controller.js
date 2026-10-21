@@ -3,22 +3,30 @@ const User = require('../models/User');
 const Enrollment = require('../models/Enrollment');
 const Invoice = require('../models/Invoice');
 const Course = require('../models/Course');
+const Lesson = require('../models/Lesson');
+const Expense = require('../models/Expense');
 const AuditLog = require('../models/AuditLog');
 const SupportTicket = require('../models/SupportTicket');
 const SystemSetting = require('../models/SystemSetting');
 const HelpArticle = require('../models/HelpArticle');
+const Notification = require('../models/Notification');
+const BroadcastLog = require('../models/BroadcastLog');
 const slugify = require('slugify');
 const emailService = require('../services/email.service');
+const smsService = require('../services/sms.service');
 const sanitizeHtml = require('sanitize-html');
+const os = require('os');
+const mongoose = require('mongoose');
 const { parseLocation } = require('../utils/geoPoint');
 const { clearCourseCache } = require('./course.controller');
+const { userCache } = require('../middleware/auth.middleware');
 
 // @desc    Get global analytics (Super Admin only)
 // @route   GET /api/super/stats
 // @access  Private (Super Admin)
 exports.getGlobalStats = async (req, res, next) => {
   try {
-    const [totalBranches, totalStudents, totalInvoices, branchPerformance] = await Promise.all([
+    const [totalBranches, totalStudents, totalInvoices, branchPerformance, masterCoursesCount, totalActiveCourses] = await Promise.all([
       Branch.countDocuments(),
       User.countDocuments({ role: 'student' }),
       Invoice.aggregate([
@@ -37,7 +45,9 @@ exports.getGlobalStats = async (req, res, next) => {
         { $unwind: '$branch' },
         { $project: { name: '$branch.name', revenue: 1, count: 1 } },
         { $sort: { revenue: -1 } }
-      ])
+      ]),
+      Course.countDocuments({ isMaster: true }),
+      Course.countDocuments({ isPublished: true, isMaster: { $ne: true } })
     ]);
 
     res.json({
@@ -45,6 +55,8 @@ exports.getGlobalStats = async (req, res, next) => {
       data: {
         branches: totalBranches,
         students: totalStudents,
+        curriculum: masterCoursesCount,
+        activeCourses: totalActiveCourses,
         revenue:  totalInvoices[0]?.total || 0,
         performance: branchPerformance
       }
@@ -114,6 +126,9 @@ exports.deployMasterCourse = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Master course not found' });
     }
 
+    // Fetch master lessons sorted by order
+    const masterLessons = await Lesson.find({ course: masterCourse._id }).sort('order').lean();
+
     const results = [];
     for (const bId of branchIds) {
       // Check if already deployed to this branch
@@ -134,10 +149,92 @@ exports.deployMasterCourse = async (req, res, next) => {
         isPublished: false // Let branch admin publish it
       });
 
-      results.push({ branchId: bId, status: 'deployed', courseId: branchCourse._id });
+      // Clone master lessons into the newly created branch course
+      if (masterLessons.length > 0) {
+        const branchLessons = masterLessons.map(l => ({
+          course: branchCourse._id,
+          title: l.title,
+          description: l.description,
+          videoUrl: l.videoUrl,
+          duration: l.duration,
+          order: l.order,
+          isPreview: l.isPreview,
+          resources: l.resources || []
+        }));
+        await Lesson.insertMany(branchLessons);
+      }
+
+      results.push({ 
+        branchId: bId, 
+        status: 'deployed', 
+        courseId: branchCourse._id,
+        lessonsCount: masterLessons.length 
+      });
     }
 
+    clearCourseCache();
+
     res.json({ success: true, data: results });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc    Sync lessons from Master Course to all its deployed branch courses
+// @route   POST /api/super/courses/:id/sync-lessons
+// @access  Private (Super Admin)
+exports.syncMasterCourseLessons = async (req, res, next) => {
+  try {
+    const masterCourseId = req.params.id;
+    const masterCourse = await Course.findById(masterCourseId);
+    if (!masterCourse || !masterCourse.isMaster) {
+      return res.status(404).json({ success: false, message: 'Master course not found' });
+    }
+
+    const masterLessons = await Lesson.find({ course: masterCourse._id }).sort('order').lean();
+    const deployedCourses = await Course.find({ masterCourseId: masterCourse._id });
+
+    let syncedBranchesCount = 0;
+    for (const branchCourse of deployedCourses) {
+      // Remove previous lessons for this branch course to avoid duplicate collisions
+      await Lesson.deleteMany({ course: branchCourse._id });
+
+      if (masterLessons.length > 0) {
+        const branchLessons = masterLessons.map(l => ({
+          course: branchCourse._id,
+          title: l.title,
+          description: l.description,
+          videoUrl: l.videoUrl,
+          duration: l.duration,
+          order: l.order,
+          isPreview: l.isPreview,
+          resources: l.resources || []
+        }));
+        await Lesson.insertMany(branchLessons);
+      }
+      syncedBranchesCount++;
+    }
+
+    await AuditLog.create({
+      actor: req.user._id,
+      action: 'SYNC_MASTER_LESSONS',
+      entity: 'Course',
+      entityId: masterCourse._id,
+      details: {
+        masterTitle: masterCourse.title,
+        lessonsCount: masterLessons.length,
+        syncedBranchesCount
+      }
+    });
+
+    clearCourseCache();
+
+    res.json({
+      success: true,
+      message: `Successfully synchronized ${masterLessons.length} lessons to ${syncedBranchesCount} deployed branch courses`,
+      syncedBranchesCount,
+      lessonsCount: masterLessons.length
+    });
   } catch (err) {
     next(err);
   }
@@ -285,33 +382,167 @@ exports.toggleCourseAllBranches = async (req, res, next) => {
   }
 };
 
-// @desc    Get consolidated finance report
+// @desc    Get consolidated finance report with P&L expenses and date-range filtering
 // @route   GET /api/super/finance
 // @access  Private (Super Admin)
 exports.getGlobalFinanceReport = async (req, res, next) => {
   try {
-    const report = await Invoice.aggregate([
-      { $group: {
-          _id: '$status',
-          total: { $sum: '$total' },
-          count: { $sum: 1 }
-        }
+    const { startDate, endDate, branchId } = req.query;
+    const invoiceMatch = {};
+    const expenseMatch = { status: 'approved' };
+
+    if (branchId) {
+      const mongoose = require('mongoose');
+      if (mongoose.Types.ObjectId.isValid(branchId)) {
+        invoiceMatch.branchId = new mongoose.Types.ObjectId(branchId);
+        expenseMatch.branchId = new mongoose.Types.ObjectId(branchId);
       }
-    ]);
+    }
 
-    const branchBreakdown = await Invoice.aggregate([
-      { $group: {
-          _id: '$branchId',
-          revenue: { $sum: { $cond: [{ $eq: ['$status', 'paid'] }, '$total', 0] } },
-          pending: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, '$total', 0] } }
+    if (startDate || endDate) {
+      invoiceMatch.createdAt = {};
+      expenseMatch.expenseDate = {};
+      if (startDate) {
+        invoiceMatch.createdAt.$gte = new Date(startDate);
+        expenseMatch.expenseDate.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        invoiceMatch.createdAt.$lte = new Date(endDate);
+        expenseMatch.expenseDate.$lte = new Date(endDate);
+      }
+    }
+
+    const [report, branchBreakdown, expenseSummary, branchExpenses] = await Promise.all([
+      Invoice.aggregate([
+        { $match: invoiceMatch },
+        { $group: {
+            _id: '$status',
+            total: { $sum: '$total' },
+            count: { $sum: 1 }
+          }
         }
-      },
-      { $lookup: { from: 'branches', localField: '_id', foreignField: '_id', as: 'branch' } },
-      { $unwind: '$branch' },
-      { $project: { name: '$branch.name', revenue: 1, pending: 1 } }
+      ]),
+      Invoice.aggregate([
+        { $match: invoiceMatch },
+        { $group: {
+            _id: '$branchId',
+            revenue: { $sum: { $cond: [{ $eq: ['$status', 'paid'] }, '$total', 0] } },
+            pending: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, '$total', 0] } }
+          }
+        },
+        { $lookup: { from: 'branches', localField: '_id', foreignField: '_id', as: 'branch' } },
+        { $unwind: '$branch' },
+        { $project: { name: '$branch.name', revenue: 1, pending: 1 } }
+      ]),
+      Expense.aggregate([
+        { $match: expenseMatch },
+        { $group: {
+            _id: '$category',
+            total: { $sum: '$amount' },
+            count: { $sum: 1 }
+          }
+        }
+      ]),
+      Expense.aggregate([
+        { $match: expenseMatch },
+        { $group: {
+            _id: '$branchId',
+            totalExpense: { $sum: '$amount' }
+          }
+        }
+      ])
     ]);
 
-    res.json({ success: true, data: { summary: report, branches: branchBreakdown } });
+    const totalPaidRevenue = report.find(r => r._id === 'paid')?.total || 0;
+    const totalPendingRevenue = report.find(r => r._id === 'pending')?.total || 0;
+    const totalExpense = expenseSummary.reduce((acc, curr) => acc + (curr.total || 0), 0);
+    const netProfit = totalPaidRevenue - totalExpense;
+    const profitMargin = totalPaidRevenue > 0 ? Number(((netProfit / totalPaidRevenue) * 100).toFixed(2)) : 0;
+
+    // Merge branch expenses into branchBreakdown
+    const expenseByBranchMap = {};
+    branchExpenses.forEach(b => {
+      if (b._id) expenseByBranchMap[b._id.toString()] = b.totalExpense;
+    });
+
+    const enrichedBranches = branchBreakdown.map(b => {
+      const bExpense = expenseByBranchMap[b._id.toString()] || 0;
+      return {
+        ...b,
+        expense: bExpense,
+        netProfit: (b.revenue || 0) - bExpense
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        summary: report,
+        expenses: {
+          total: totalExpense,
+          categories: expenseSummary
+        },
+        pnl: {
+          totalRevenue: totalPaidRevenue,
+          totalPending: totalPendingRevenue,
+          totalExpense,
+          netProfit,
+          profitMargin
+        },
+        branches: enrichedBranches
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc    Export Consolidated Global Ledger to CSV
+// @route   GET /api/super/finance/export-ledger
+// @access  Private (Super Admin)
+exports.exportGlobalLedger = async (req, res, next) => {
+  try {
+    const { startDate, endDate, branchId } = req.query;
+    const invoiceMatch = {};
+
+    if (branchId) {
+      const mongoose = require('mongoose');
+      if (mongoose.Types.ObjectId.isValid(branchId)) {
+        invoiceMatch.branchId = new mongoose.Types.ObjectId(branchId);
+      }
+    }
+
+    if (startDate || endDate) {
+      invoiceMatch.createdAt = {};
+      if (startDate) invoiceMatch.createdAt.$gte = new Date(startDate);
+      if (endDate) invoiceMatch.createdAt.$lte = new Date(endDate);
+    }
+
+    const invoices = await Invoice.find(invoiceMatch)
+      .populate('user', 'name email phone')
+      .populate('branchId', 'name code')
+      .sort('-createdAt')
+      .lean();
+
+    const headers = ['Invoice ID', 'Type', 'Student Name', 'Student Email', 'Phone', 'Branch', 'Subtotal', 'Discount', 'Total (BDT)', 'Status', 'Date'];
+    const rows = invoices.map(inv => [
+      `"${inv.invoiceNumber || inv._id}"`,
+      '"Revenue/Tuition"',
+      `"${inv.user?.name || 'N/A'}"`,
+      `"${inv.user?.email || 'N/A'}"`,
+      `"${inv.user?.phone || 'N/A'}"`,
+      `"${inv.branchId?.name || 'Central/Online'}"`,
+      inv.subtotal || inv.total || 0,
+      inv.discount || 0,
+      inv.total || 0,
+      `"${inv.status}"`,
+      `="${inv.createdAt ? new Date(inv.createdAt).toISOString().split('T')[0] : ''}"`
+    ].join(','));
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=SYICT_Global_Ledger_${new Date().toISOString().slice(0, 10)}.csv`);
+    res.status(200).send(csvContent);
   } catch (err) {
     next(err);
   }
@@ -608,16 +839,51 @@ exports.deleteMasterCourse = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// @desc    Get all support tickets
+// @desc    Get all support tickets with SLA intelligence
 // @route   GET /api/super/tickets
 // @access  Private (Super Admin)
 exports.getTickets = async (req, res, next) => {
   try {
     const tickets = await SupportTicket.find()
-      .populate('user', 'name email role')
+      .populate('user', 'name email role phone')
       .populate('responses.user', 'name role')
       .sort('-createdAt');
-    res.json({ success: true, data: tickets });
+
+    const now = Date.now();
+    const SLA_LIMIT_MS = 24 * 60 * 60 * 1000; // 24 hours SLA threshold
+
+    let escalatedCount = 0;
+    const enrichedTickets = await Promise.all(tickets.map(async (ticket) => {
+      const isPending = ['open', 'in-progress'].includes(ticket.status);
+      const ageMs = now - new Date(ticket.createdAt).getTime();
+      const isBreached = isPending && ageMs > SLA_LIMIT_MS;
+
+      if (isBreached && !ticket.isEscalated) {
+        ticket.isEscalated = true;
+        ticket.priority = 'critical';
+        ticket.escalatedAt = new Date();
+        ticket.escalationReason = 'Auto-escalated: Response SLA exceeded 24 hours';
+        await ticket.save();
+      }
+
+      if (ticket.isEscalated) escalatedCount++;
+
+      return {
+        ...ticket.toObject(),
+        isSlaBreached: isBreached || ticket.isEscalated,
+        slaRemainingMs: Math.max(0, SLA_LIMIT_MS - ageMs)
+      };
+    }));
+
+    const metrics = {
+      total: enrichedTickets.length,
+      open: enrichedTickets.filter(t => t.status === 'open').length,
+      inProgress: enrichedTickets.filter(t => t.status === 'in-progress').length,
+      resolved: enrichedTickets.filter(t => t.status === 'resolved').length,
+      escalated: escalatedCount
+    };
+
+    res.json({ success: true, metrics, data: enrichedTickets });
   } catch (err) { next(err); }
 };
 
@@ -647,6 +913,7 @@ exports.replyToTicket = async (req, res, next) => {
     });
     
     if (ticket.status === 'open') ticket.status = 'in-progress';
+    if (!ticket.firstResponseAt) ticket.firstResponseAt = new Date();
     await ticket.save();
 
     const populatedTicket = await SupportTicket.findById(ticket._id)
@@ -672,6 +939,46 @@ exports.replyToTicket = async (req, res, next) => {
     }
 
     res.json({ success: true, data: populatedTicket });
+  } catch (err) { next(err); }
+};
+
+// @desc    Manually escalate a support ticket
+// @route   POST /api/super/tickets/:id/escalate
+// @access  Private (Super Admin)
+exports.escalateTicket = async (req, res, next) => {
+  try {
+    const { reason } = req.body || {};
+    const ticket = await SupportTicket.findById(req.params.id).populate('user', 'name email');
+    if (!ticket) return res.status(404).json({ success: false, message: 'Ticket not found' });
+
+    ticket.isEscalated = true;
+    ticket.priority = 'critical';
+    ticket.escalatedAt = new Date();
+    ticket.escalationReason = reason || 'High-priority manual escalation by Super Admin';
+    await ticket.save();
+
+    await AuditLog.create({
+      actor: req.user._id,
+      action: 'ESCALATE_TICKET',
+      entity: 'SupportTicket',
+      entityId: ticket._id,
+      details: { subject: ticket.subject, reason: ticket.escalationReason }
+    });
+
+    try {
+      const { emitToExecutives } = require('../sockets/socket');
+      emitToExecutives('TICKET_ESCALATED', {
+        ticketId: ticket._id,
+        subject: ticket.subject,
+        reason: ticket.escalationReason,
+        priority: ticket.priority,
+        escalatedAt: ticket.escalatedAt,
+      });
+    } catch (e) {
+      console.error('[Socket Emit Error]', e.message);
+    }
+
+    res.json({ success: true, message: 'Ticket escalated to critical SLA status', data: ticket });
   } catch (err) { next(err); }
 };
 
@@ -752,17 +1059,51 @@ exports.deleteHelpArticle = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// @desc    Get system-wide audit logs
+// @desc    Get system-wide audit logs with server-side pagination and filters
 // @route   GET /api/super/audit-logs
 // @access  Private (Super Admin)
 exports.getAuditLogs = async (req, res, next) => {
   try {
-    const rawLogs = await AuditLog.find()
-      .populate('actor', 'name email role')
-      .populate('branchId', 'name code')
-      .sort('-createdAt')
-      .limit(200)
-      .lean();
+    const { page = 1, limit = 50, action, entity, branchId, search, startDate, endDate } = req.query;
+    const query = {};
+
+    if (action) query.action = action;
+    if (entity) query.entity = entity;
+    if (branchId) {
+      const mongoose = require('mongoose');
+      if (mongoose.Types.ObjectId.isValid(branchId)) {
+        query.branchId = new mongoose.Types.ObjectId(branchId);
+      }
+    }
+
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) query.createdAt.$gte = new Date(startDate);
+      if (endDate) query.createdAt.$lte = new Date(endDate);
+    }
+
+    if (search) {
+      query.$or = [
+        { action: { $regex: search, $options: 'i' } },
+        { entity: { $regex: search, $options: 'i' } },
+        { ipAddress: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const currentPage = Math.max(1, parseInt(page, 10));
+    const pageLimit = Math.min(100, Math.max(10, parseInt(limit, 10)));
+    const skip = (currentPage - 1) * pageLimit;
+
+    const [total, rawLogs] = await Promise.all([
+      AuditLog.countDocuments(query),
+      AuditLog.find(query)
+        .populate('actor', 'name email role')
+        .populate('branchId', 'name code')
+        .sort('-createdAt')
+        .skip(skip)
+        .limit(pageLimit)
+        .lean()
+    ]);
 
     // Collect all branch IDs from logs where entity === 'Branch'
     const branchIdsToFetch = new Set();
@@ -801,7 +1142,14 @@ exports.getAuditLogs = async (req, res, next) => {
       };
     });
 
-    res.json({ success: true, data: logs });
+    res.json({
+      success: true,
+      total,
+      page: currentPage,
+      limit: pageLimit,
+      totalPages: Math.ceil(total / pageLimit),
+      data: logs
+    });
   } catch (err) { next(err); }
 };
 
@@ -937,3 +1285,450 @@ exports.getBranchLeaderboardAnalytics = async (req, res, next) => {
   }
 };
 
+// @desc    Transfer / Migrate student from one campus branch to another
+// @route   POST /api/super/transfers/student
+// @access  Private (super_admin, super_management)
+exports.transferStudentBranch = async (req, res, next) => {
+  try {
+    const { studentId, toBranchId, reason = '', transferNotes = '' } = req.body;
+
+    if (!studentId || !toBranchId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Student ID and Destination Branch ID are required',
+      });
+    }
+
+    const User = require('../models/User');
+    const Branch = require('../models/Branch');
+    const Enrollment = require('../models/Enrollment');
+    const Invoice = require('../models/Invoice');
+    const AuditLog = require('../models/AuditLog');
+
+    const student = await User.findById(studentId);
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student account not found' });
+    }
+
+    if (student.role !== 'student') {
+      return res.status(400).json({ success: false, message: 'Only accounts with the student role can be transferred' });
+    }
+
+    const targetBranch = await Branch.findById(toBranchId);
+    if (!targetBranch) {
+      return res.status(404).json({ success: false, message: 'Target destination campus branch not found' });
+    }
+
+    const fromBranchId = student.branchId;
+    if (fromBranchId && fromBranchId.toString() === toBranchId.toString()) {
+      return res.status(400).json({ success: false, message: 'Student is already assigned to this campus branch' });
+    }
+
+    const fromBranch = fromBranchId ? await Branch.findById(fromBranchId) : null;
+
+    // 1. Maintain historical branch trail in secondaryBranches
+    const secondary = student.secondaryBranches || [];
+    if (fromBranchId && !secondary.some(b => b.toString() === fromBranchId.toString())) {
+      secondary.push(fromBranchId);
+    }
+
+    student.branchId = targetBranch._id;
+    student.secondaryBranches = secondary;
+    student.tokenVersion = (student.tokenVersion || 0) + 1; // Invalidate session so new branch takes effect
+    await student.save();
+
+    const userCache = require('../utils/userCache');
+    userCache.del(student._id);
+
+    // 2. Transfer active enrollments to the new campus branch
+    await Enrollment.updateMany(
+      { user: student._id },
+      { $set: { branchId: targetBranch._id } }
+    );
+
+    // 3. Update pending/unpaid invoices to the new campus branch
+    await Invoice.updateMany(
+      { user: student._id, status: { $ne: 'paid' } },
+      { $set: { branchId: targetBranch._id } }
+    );
+
+    // 4. Log Audit Trail
+    await AuditLog.create({
+      actor: req.user._id,
+      action: 'TRANSFER_STUDENT_BRANCH',
+      entity: 'User',
+      entityId: student._id,
+      branchId: targetBranch._id,
+      details: {
+        studentId: student._id,
+        studentName: student.name,
+        studentEmail: student.email,
+        fromBranchId: fromBranchId || null,
+        fromBranchName: fromBranch?.name || 'HQ / Central',
+        toBranchId: targetBranch._id,
+        toBranchName: targetBranch.name,
+        reason: reason.trim(),
+        transferNotes: transferNotes.trim(),
+        adminName: req.user.name,
+      },
+      ipAddress: req.ip || '',
+      userAgent: req.headers['user-agent'] || '',
+    });
+
+    res.json({
+      success: true,
+      message: `Student ${student.name} successfully transferred from ${fromBranch?.name || 'HQ'} to ${targetBranch.name}.`,
+      data: {
+        student: {
+          _id: student._id,
+          name: student.name,
+          email: student.email,
+          branchId: targetBranch._id,
+          branchName: targetBranch.name,
+          secondaryBranches: student.secondaryBranches,
+        },
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc    Send Multi-Channel Emergency Broadcast (SMS, Email, In-App)
+// @route   POST /api/super/broadcast/send
+// @access  Private (Super Admin)
+exports.sendEmergencyBroadcast = async (req, res, next) => {
+  try {
+    const { title, subject, message, channels, targetAudience, branchId, urgency } = req.body;
+
+    if (!title || !message || !channels || !channels.length) {
+      return res.status(400).json({ success: false, message: 'Title, message, and at least one channel are required.' });
+    }
+
+    // Determine target users query
+    const userQuery = { isActive: true };
+    if (targetAudience === 'all_students') userQuery.role = 'student';
+    else if (targetAudience === 'all_instructors') userQuery.role = 'instructor';
+    else if (targetAudience === 'all_branch_staff') userQuery.role = { $in: ['branch_admin', 'branch_management', 'employee'] };
+    else if (targetAudience === 'specific_branch' && branchId) userQuery.branchId = branchId;
+
+    const targetUsers = await User.find(userQuery).select('name email phone role branchId');
+    const totalRecipients = targetUsers.length;
+
+    let smsSent = 0;
+    let emailSent = 0;
+    let inAppSent = 0;
+    let failedCount = 0;
+
+    // 1. In-App Broadcast
+    if (channels.includes('in_app')) {
+      try {
+        const notifService = require('../services/notification.service');
+        await notifService.dispatchNotification({
+          branchId: targetAudience === 'specific_branch' ? branchId : null,
+          user: null, // Broadcast
+          title: `[${(urgency || 'normal').toUpperCase()}] ${title}`,
+          message,
+          type: urgency === 'critical' ? 'error' : urgency === 'urgent' ? 'warning' : 'info',
+          priority: urgency === 'critical' || urgency === 'urgent' ? 'urgent' : 'high',
+          category: 'system',
+          targetRole: targetAudience === 'all_students' ? 'student' : targetAudience === 'all_instructors' ? 'instructor' : 'all',
+          actor: req.user._id,
+        });
+        inAppSent = totalRecipients;
+      } catch (e) {
+        console.error('[Broadcast In-App Error]', e.message);
+        failedCount++;
+      }
+    }
+
+    // 2. Email Dispatch
+    if (channels.includes('email')) {
+      const emailRecipients = targetUsers.filter(u => u.email);
+      if (emailRecipients.length > 0) {
+        // Asynchronously dispatch email alerts without blocking main loop
+        (async () => {
+          for (const recipient of emailRecipients) {
+            try {
+              await emailService._send({
+                to: recipient.email,
+                subject: subject || `🚨 SYICT Emergency Notice: ${title}`,
+                html: `
+                  <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: auto; padding: 24px; border: 1px solid #fee2e2; border-radius: 16px; background-color: #ffffff;">
+                    <div style="background: ${urgency === 'critical' ? '#dc2626' : urgency === 'urgent' ? '#ea580c' : '#4f46e5'}; color: white; padding: 8px 16px; border-radius: 8px; font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; display: inline-block;">
+                      ${urgency === 'critical' ? '🚨 CRITICAL ADVISORY' : urgency === 'urgent' ? '⚠️ URGENT BROADCAST' : '📢 OFFICIAL NOTICE'}
+                    </div>
+                    <h2 style="color: #0f172a; margin-top: 18px; font-size: 20px; font-weight: 800;">${title}</h2>
+                    <p style="color: #334155; font-size: 15px; line-height: 1.6;">Dear ${recipient.name},</p>
+                    <div style="background: #f8fafc; border-left: 4px solid ${urgency === 'critical' ? '#dc2626' : urgency === 'urgent' ? '#ea580c' : '#4f46e5'}; padding: 16px; border-radius: 8px; margin: 18px 0; font-size: 14px; color: #1e293b; line-height: 1.6;">
+                      ${message}
+                    </div>
+                    <p style="color: #64748b; font-size: 12px; margin-top: 24px; border-top: 1px solid #f1f5f9; padding-top: 16px;">
+                      Smart Youth ICT Head Office Emergency Dispatch Network. Please do not reply directly to this automated email.
+                    </p>
+                  </div>
+                `
+              });
+            } catch (err) {
+              console.error(`[Broadcast Email Fail] ${recipient.email}:`, err.message);
+            }
+          }
+        })().catch(e => console.error('[Broadcast Worker Error]', e));
+        emailSent = emailRecipients.length;
+      }
+    }
+
+    // 3. SMS Dispatch
+    if (channels.includes('sms')) {
+      const smsRecipients = targetUsers.filter(u => u.phone);
+      for (const recipient of smsRecipients) {
+        try {
+          const smsText = `[SYICT Alert] ${title}: ${message.slice(0, 110)}`;
+          await smsService.sendSMS(recipient.phone, smsText);
+          smsSent++;
+        } catch (err) {
+          failedCount++;
+        }
+      }
+    }
+
+    const broadcastLog = await BroadcastLog.create({
+      title,
+      subject: subject || title,
+      message,
+      channels,
+      targetAudience: targetAudience || 'all_users',
+      branchId: branchId || null,
+      urgency: urgency || 'normal',
+      sentBy: req.user._id,
+      stats: {
+        totalRecipients,
+        smsSent,
+        emailSent,
+        inAppSent,
+        failedCount
+      }
+    });
+
+    await AuditLog.create({
+      actor: req.user._id,
+      action: 'SEND_EMERGENCY_BROADCAST',
+      entity: 'BroadcastLog',
+      entityId: broadcastLog._id,
+      details: {
+        title,
+        channels,
+        targetAudience,
+        totalRecipients,
+        urgency
+      }
+    });
+
+    try {
+      const { emitToAll, emitToBranch } = require('../sockets/socket');
+      if (branchId) {
+        emitToBranch(branchId, 'EMERGENCY_BROADCAST', { title, message, urgency, channels });
+      } else {
+        emitToAll('EMERGENCY_BROADCAST', { title, message, urgency, channels });
+      }
+    } catch (e) {
+      console.error('[Socket Broadcast Error]', e.message);
+    }
+
+    res.json({
+      success: true,
+      message: `Emergency broadcast successfully dispatched to ${totalRecipients} recipients.`,
+      data: broadcastLog
+    });
+  } catch (err) { next(err); }
+};
+
+// @desc    Get Broadcast Dispatch Logs
+// @route   GET /api/super/broadcast/logs
+// @access  Private (Super Admin)
+exports.getBroadcastLogs = async (req, res, next) => {
+  try {
+    const logs = await BroadcastLog.find()
+      .populate('sentBy', 'name email role')
+      .populate('branchId', 'name city')
+      .sort('-createdAt')
+      .limit(50);
+    res.json({ success: true, data: logs });
+  } catch (err) { next(err); }
+};
+
+// @desc    Get Real-time DevOps & Server Health Probe
+// @route   GET /api/super/devops-probe
+// @access  Private (Super Admin)
+exports.getDevopsHealthProbe = async (req, res, next) => {
+  try {
+    const memUsage = process.memoryUsage();
+    const toMB = (bytes) => (bytes / 1024 / 1024).toFixed(2);
+
+    // MongoDB connection & ping
+    const dbState = mongoose.connection.readyState;
+    const dbStates = { 0: 'disconnected', 1: 'connected', 2: 'connecting', 3: 'disconnecting' };
+    let dbPingMs = null;
+    if (dbState === 1 && mongoose.connection.db) {
+      const pingStart = Date.now();
+      await mongoose.connection.db.admin().ping();
+      dbPingMs = Date.now() - pingStart;
+    }
+
+    // NodeCache / userCache stats if available
+    let cacheStats = { hits: 0, misses: 0, keys: 0 };
+    if (userCache && typeof userCache.getStats === 'function') {
+      cacheStats = userCache.getStats();
+    }
+
+    const healthData = {
+      timestamp: new Date().toISOString(),
+      status: dbState === 1 ? 'healthy' : 'degraded',
+      process: {
+        nodeVersion: process.version,
+        pid: process.pid,
+        uptimeSeconds: Math.floor(process.uptime()),
+        memory: {
+          rssMB: toMB(memUsage.rss),
+          heapTotalMB: toMB(memUsage.heapTotal),
+          heapUsedMB: toMB(memUsage.heapUsed),
+          externalMB: toMB(memUsage.external)
+        }
+      },
+      system: {
+        platform: os.platform(),
+        arch: os.arch(),
+        cpuCount: os.cpus().length,
+        loadAvg: os.loadavg(),
+        freeMemMB: toMB(os.freemem()),
+        totalMemMB: toMB(os.totalmem()),
+        systemUptimeHours: (os.uptime() / 3600).toFixed(1)
+      },
+      database: {
+        state: dbStates[dbState] || 'unknown',
+        pingMs: dbPingMs,
+        name: mongoose.connection.name
+      },
+      cache: cacheStats
+    };
+
+    res.json({ success: true, data: healthData });
+  } catch (err) { next(err); }
+};
+
+
+
+
+// @desc    Get Database Backup Preview (Collections & Document Counts)
+// @route   GET /api/super/system/backup/preview
+// @access  Private (Super Admin)
+exports.getDatabaseBackupPreview = async (req, res, next) => {
+  try {
+    const collections = await mongoose.connection.db.listCollections().toArray();
+    const stats = [];
+    let totalDocuments = 0;
+
+    for (const col of collections) {
+      if (col.name.startsWith('system.')) continue;
+      const count = await mongoose.connection.db.collection(col.name).countDocuments();
+      totalDocuments += count;
+      stats.push({
+        name: col.name,
+        documentCount: count,
+      });
+    }
+
+    stats.sort((a, b) => b.documentCount - a.documentCount);
+
+    res.json({
+      success: true,
+      data: {
+        totalCollections: stats.length,
+        totalDocuments,
+        databaseName: mongoose.connection.name,
+        collections: stats,
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc    1-Click Cloud Database Backup & Disaster Recovery Download (.json.gz)
+// @route   GET /api/super/system/backup/download
+// @access  Private (Super Admin)
+exports.downloadDatabaseBackup = async (req, res, next) => {
+  try {
+    const zlib = require('zlib');
+    const collections = await mongoose.connection.db.listCollections().toArray();
+    const backupData = {
+      manifest: {
+        platform: 'SYICT Global Enterprise Cloud',
+        version: '1.0.0',
+        environment: process.env.NODE_ENV || 'production',
+        database: mongoose.connection.name,
+        generatedAt: new Date().toISOString(),
+        generatedBy: {
+          id: req.user._id,
+          name: req.user.name,
+          email: req.user.email,
+          role: req.user.role
+        },
+        collectionCount: 0,
+        totalRecords: 0
+      },
+      collections: {}
+    };
+
+    let totalDocs = 0;
+
+    for (const col of collections) {
+      if (col.name.startsWith('system.')) continue;
+      const docs = await mongoose.connection.db.collection(col.name).find({}).toArray();
+      
+      // For security, strip sensitive secrets
+      if (col.name === 'users') {
+        docs.forEach(u => {
+          delete u.twoFactorSecret;
+          delete u.twoFactorOtp;
+        });
+      }
+
+      backupData.collections[col.name] = docs;
+      totalDocs += docs.length;
+    }
+
+    backupData.manifest.collectionCount = Object.keys(backupData.collections).length;
+    backupData.manifest.totalRecords = totalDocs;
+
+    // Log the backup download in AuditLog
+    const AuditLog = require('../models/AuditLog');
+    await AuditLog.create({
+      actor: req.user._id,
+      action: 'SYSTEM_BACKUP_GENERATED',
+      entity: 'Database',
+      details: {
+        database: mongoose.connection.name,
+        collectionCount: backupData.manifest.collectionCount,
+        totalRecords: totalDocs,
+        adminName: req.user.name,
+        adminEmail: req.user.email
+      },
+      ipAddress: req.ip || '',
+      userAgent: req.headers['user-agent'] || ''
+    });
+
+    const jsonStr = JSON.stringify(backupData);
+    const compressed = zlib.gzipSync(Buffer.from(jsonStr, 'utf-8'));
+
+    const filename = "SYICT_DB_BACKUP_" + mongoose.connection.name + "_" + new Date().toISOString().slice(0, 10) + ".json.gz";
+
+    res.setHeader('Content-Type', 'application/gzip');
+    res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
+    res.setHeader('Content-Length', compressed.length);
+    res.status(200).send(compressed);
+  } catch (err) {
+    next(err);
+  }
+};
