@@ -9,11 +9,13 @@ process.on('unhandledRejection', (reason, promise) => {
 // 🚨 EMERGENCY DIAGNOSTIC END 🚨
 
 require('dotenv').config();
+const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
 const connectDB = require('./config/db');
 const compression = require('compression');
+const { initSocket } = require('./sockets/socket');
 const errorMiddleware = require('./middleware/error.middleware');
 const { verifyToken } = require('./utils/jwt');
 const SystemSetting = require('./models/SystemSetting');
@@ -125,7 +127,9 @@ app.use(async (req, res, next) => {
       path.startsWith('/api/cms/settings') ||
       path.startsWith('/api/super') ||
       path === '/api/auth/login' ||
-      path.startsWith('/api/payments/webhook')
+      path.startsWith('/api/payments/webhook') ||
+      path.startsWith('/api/requisitions/webhook') ||
+      path.startsWith('/api/webhooks')
     ) {
       return next();
     }
@@ -216,8 +220,12 @@ if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
   }
 }
 
+// ─── HTTP Server & WebSocket Gateway ──────────────────────────────
+const server = http.createServer(app);
+initSocket(server, allowedOrigins);
+
 if (process.env.NODE_ENV !== 'production' || process.env.VERCEL_DEV) {
-  app.listen(PORT, () => {
+  server.listen(PORT, () => {
     console.log(`🚀 SYICT Backend running on http://localhost:${PORT}`);
   });
 }
