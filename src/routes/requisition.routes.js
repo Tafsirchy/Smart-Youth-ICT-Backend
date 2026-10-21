@@ -27,9 +27,15 @@ const managersOnly = ['branch_admin', 'branch_management', 'super_admin', 'super
 const superOnly = ['super_admin', 'super_management'];
 
 // Central Warehouse Stock Management (Super Admin)
-router.get('/warehouse/items', authorize(...superOnly), getWarehouseInventory);
-router.post('/warehouse/items', authorize(...superOnly), createWarehouseItem);
-router.put('/warehouse/items/:id', authorize(...superOnly), updateWarehouseItem);
+// Canonical resource is "/warehouse/items". "/warehouse/inventory" is kept as a
+// compatibility alias so older clients keep working while they migrate.
+['/warehouse/items', '/warehouse/inventory'].forEach((base) => {
+  router.get(base, authorize(...superOnly), getWarehouseInventory);
+  router.post(base, authorize(...superOnly), createWarehouseItem);
+  // Both PUT (full update) and PATCH (partial update) are accepted.
+  router.put(`${base}/:id`, authorize(...superOnly), updateWarehouseItem);
+  router.patch(`${base}/:id`, authorize(...superOnly), updateWarehouseItem);
+});
 router.post('/:id/simulate-delivery', authorize(...superOnly), simulateCourierWebhook);
 
 router.get('/', authorize(...staffAndManagers), getRequisitions);
