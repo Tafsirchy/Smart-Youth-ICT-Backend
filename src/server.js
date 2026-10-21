@@ -87,41 +87,16 @@ app.use(
 // Exact-match allowlist only. Suffix matching (`.vercel.app`,
 // `smartyouthict.com`) previously made the check meaningless because the
 // reject branch allowed every origin as well.
-const STATIC_ORIGINS = [
-  'https://syict-frontend.vercel.app',
-  'https://smart-youth-ict-frontend.vercel.app',
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'https://www.smartyouthict.com',
-  'https://smartyouthict.com',
-];
-
-const normalizeOrigin = (value) => String(value || '').trim().replace(/\/+$/, '');
-
-const allowedOrigins = new Set(
-  [
-    process.env.FRONTEND_URL,
-    ...STATIC_ORIGINS,
-    // Extra origins (e.g. a preview deployment) must be listed explicitly.
-    ...String(process.env.ALLOWED_ORIGINS || '').split(','),
-  ]
-    .map(normalizeOrigin)
-    .filter(Boolean)
-);
+const { buildAllowedOrigins } = require('./config/allowedOrigins');
+const { isAllowed: isAllowedOrigin } = buildAllowedOrigins();
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // No Origin header: same-origin navigation, curl, or a server-to-server call.
-    if (!origin) {
+    if (isAllowedOrigin(origin)) {
       return callback(null, true);
     }
 
-    const normalized = normalizeOrigin(origin);
-    if (allowedOrigins.has(normalized)) {
-      return callback(null, true);
-    }
-
-    const error = new Error(`Origin '${normalized}' is not allowed by the CORS policy.`);
+    const error = new Error(`Origin '${origin}' is not allowed by the CORS policy.`);
     error.status = 403;
     return callback(error);
   },
@@ -262,8 +237,8 @@ if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
 
 // ─── HTTP Server & WebSocket Gateway ──────────────────────────────
 const server = http.createServer(app);
-// socket.io applies the same exact-match allowlist as the HTTP layer.
-initSocket(server, Array.from(allowedOrigins));
+// socket.io applies the same origin check as the HTTP layer.
+initSocket(server, isAllowedOrigin);
 
 if (process.env.NODE_ENV !== 'production' || process.env.VERCEL_DEV) {
   server.listen(PORT, () => {
