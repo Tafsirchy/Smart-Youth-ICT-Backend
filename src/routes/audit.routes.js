@@ -1,7 +1,8 @@
 const express = require('express');
 const {
   getBranchComprehensiveAuditReport,
-  sendBranchAuditAlert
+  sendBranchAuditAlert,
+  autoEnforceDirectives,
 } = require('../controllers/audit.controller');
 const { protect } = require('../middleware/auth.middleware');
 const { authorize } = require('../middleware/role.middleware');
@@ -16,5 +17,8 @@ router.get('/branch-report', getBranchComprehensiveAuditReport);
 
 // Direct Executive Intervention: Send audit warning or directive to branch
 router.post('/send-branch-alert', sendBranchAuditAlert);
+
+// Automated Executive Directive Auto-Enforcement
+router.post('/auto-enforce', autoEnforceDirectives);
 
 module.exports = router;
