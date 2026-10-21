@@ -983,6 +983,22 @@ exports.autoEnforceDirectives = async (req, res, next) => {
           }
         });
 
+        // 4. Realtime push to the executive HQ room so HQ dashboards update live
+        try {
+          const { emitToExecutives } = require('../sockets/socket');
+          emitToExecutives('AUDIT_DIRECTIVE_ENFORCED', {
+            branchId: b._id,
+            branchName: b.name,
+            score,
+            netProfit,
+            totalOverdue,
+            directiveTitle,
+            enforcedAt: new Date(),
+          });
+        } catch (socketErr) {
+          console.error('[Socket Emit Error]', socketErr.message);
+        }
+
         enforcementResults.push({
           branchId: b._id,
           branchName: b.name,
