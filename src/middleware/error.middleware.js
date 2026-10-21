@@ -3,12 +3,10 @@ const errorMiddleware = (err, req, res, next) => {
   let status = err.statusCode || err.status || 500;
   let message = err.message || 'Internal Server Error';
 
-  // Always ensure CORS headers are present on error responses
-  const origin = req.headers?.origin;
-  if (origin) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-  }
+  // CORS headers are set by the cors middleware from the configured allowlist.
+  // They are deliberately not re-derived from the request's Origin header here:
+  // reflecting an arbitrary origin would hand out credentialed responses to
+  // any site on the internet.
 
   // Handle entity too large (413)
   if (err.type === 'entity.too.large' || err.status === 413) {
