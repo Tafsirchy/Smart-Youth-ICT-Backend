@@ -30,6 +30,13 @@ const errorMiddleware = (err, req, res, next) => {
 
   if (status >= 500) {
     console.error(`[${status}] ${req.method} ${req.originalUrl} →`, err);
+    // A 5xx message is an internal failure description. It can carry a database
+    // host, a file path, a payment provider payload or a stack fragment, none
+    // of which belongs in a response body. Keep the detail in the log and
+    // return a generic message unless this is a development environment.
+    if (process.env.NODE_ENV !== 'development') {
+      message = 'Internal Server Error';
+    }
   } else if (process.env.NODE_ENV === 'development') {
     console.warn(`[${status}] ${req.method} ${req.originalUrl} →`, message);
   }
