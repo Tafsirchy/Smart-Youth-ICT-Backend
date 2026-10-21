@@ -504,17 +504,25 @@ exports.createWarehouseItem = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Item name and unique SKU are required' });
     }
 
-    const item = await WarehouseItem.create({
-      name: name.trim(),
-      sku: sku.trim().toUpperCase(),
-      category: category || 'stationery',
-      stockQuantity: Number(stockQuantity) || 0,
-      minStockAlert: Number(minStockAlert) || 20,
-      unitCost: Number(unitCost) || 0,
-      unit: unit || 'pcs',
-      location: location || 'Central HQ Warehouse',
-      description: description || '',
-    });
+    let item;
+    try {
+      item = await WarehouseItem.create({
+        name: name.trim(),
+        sku: sku.trim().toUpperCase(),
+        category: category || 'stationery',
+        stockQuantity: Number(stockQuantity) || 0,
+        minStockAlert: Number(minStockAlert) || 20,
+        unitCost: Number(unitCost) || 0,
+        unit: unit || 'pcs',
+        location: location || 'Central HQ Warehouse',
+        description: description || '',
+      });
+    } catch (createErr) {
+      if (createErr && createErr.code === 11000) {
+        return res.status(409).json({ success: false, message: 'A warehouse item with this SKU already exists' });
+      }
+      throw createErr;
+    }
 
     res.status(201).json({
       success: true,
@@ -527,15 +535,69 @@ exports.createWarehouseItem = async (req, res, next) => {
 };
 
 // @desc    Update or restock warehouse item
-// @route   PUT /api/requisitions/warehouse/items/:id
+// @route   PUT|PATCH /api/requisitions/warehouse/items/:id
 // @access  Private (super_admin, super_management)
 exports.updateWarehouseItem = async (req, res, next) => {
   try {
-    const item = await WarehouseItem.findByIdAndUpdate(
-      req.params.id,
-      { $set: req.body },
-      { new: true, runValidators: true }
-    );
+    // Whitelist mutable fields to prevent mass-assignment (e.g. _id / createdAt tampering).
+    const MUTABLE_FIELDS = [
+      'name',
+      'sku',
+      'category',
+      'stockQuantity',
+      'minStockAlert',
+      'unitCost',
+      'unit',
+      'location',
+      'description',
+      'isActive',
+    ];
+
+    const update = {};
+    MUTABLE_FIELDS.forEach((field) => {
+      if (req.body[field] !== undefined) update[field] = req.body[field];
+    });
+
+    if (!Object.keys(update).length) {
+      return res.status(400).json({ success: false, message: 'No valid warehouse fields supplied for update' });
+    }
+
+    if (update.sku !== undefined) {
+      update.sku = String(update.sku).trim().toUpperCase();
+    }
+    if (update.stockQuantity !== undefined) {
+      update.stockQuantity = Number(update.stockQuantity);
+      if (Number.isNaN(update.stockQuantity) || update.stockQuantity < 0) {
+        return res.status(400).json({ success: false, message: 'stockQuantity must be a non-negative number' });
+      }
+    }
+    if (update.minStockAlert !== undefined) {
+      update.minStockAlert = Number(update.minStockAlert);
+      if (Number.isNaN(update.minStockAlert) || update.minStockAlert < 0) {
+        return res.status(400).json({ success: false, message: 'minStockAlert must be a non-negative number' });
+      }
+    }
+    if (update.unitCost !== undefined) {
+      update.unitCost = Number(update.unitCost);
+      if (Number.isNaN(update.unitCost) || update.unitCost < 0) {
+        return res.status(400).json({ success: false, message: 'unitCost must be a non-negative number' });
+      }
+    }
+
+    let item;
+    try {
+      item = await WarehouseItem.findByIdAndUpdate(
+        req.params.id,
+        { $set: update },
+        { new: true, runValidators: true }
+      );
+    } catch (updateErr) {
+      if (updateErr && updateErr.code === 11000) {
+        return res.status(409).json({ success: false, message: 'A warehouse item with this SKU already exists' });
+      }
+      throw updateErr;
+    }
+
     if (!item) {
       return res.status(404).json({ success: false, message: 'Warehouse item not found' });
     }
