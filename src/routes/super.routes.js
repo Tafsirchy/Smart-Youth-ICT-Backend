@@ -12,8 +12,10 @@ const {
   updateMasterCourse,
   getMasterCourses,
   deployMasterCourse, 
+  syncMasterCourseLessons,
   toggleCourseAllBranches, 
-  getGlobalFinanceReport, 
+  getGlobalFinanceReport,
+  exportGlobalLedger, 
   getAuditLogs,
   getTickets,
   replyToTicket,
@@ -25,7 +27,14 @@ const {
   updateHelpArticle,
   deleteHelpArticle,
   deleteMasterCourse,
-  getBranchLeaderboardAnalytics
+  getBranchLeaderboardAnalytics,
+  transferStudentBranch,
+  escalateTicket,
+  sendEmergencyBroadcast,
+  getBroadcastLogs,
+  getDevopsHealthProbe,
+  getDatabaseBackupPreview,
+  downloadDatabaseBackup,
 } = require('../controllers/super.controller');
 const { protect } = require('../middleware/auth.middleware');
 const { authorize } = require('../middleware/role.middleware');
@@ -48,6 +57,7 @@ router.patch('/branches/:id/toggle-status', toggleBranchStatus);
 router.delete('/branches/:id', deleteBranch);
 router.get('/branches/:id/courses', getBranchCoursesAssignment);
 router.put('/branches/:id/courses', updateBranchCoursesAssignment);
+router.post('/transfers/student', transferStudentBranch);
 
 // Master Curriculum
 router.get('/courses',           getMasterCourses);
@@ -55,15 +65,29 @@ router.post('/courses',          createMasterCourse);
 router.put('/courses/:id',       updateMasterCourse);
 router.delete('/courses/:id',    deleteMasterCourse);
 router.post('/deploy-course',    deployMasterCourse);
+router.post('/courses/:id/sync-lessons', syncMasterCourseLessons);
 router.patch('/courses/:id/toggle-all-branches', toggleCourseAllBranches);
 
 // Global Finance
-router.get('/finance',         getGlobalFinanceReport);
+router.get('/finance',               getGlobalFinanceReport);
+router.get('/finance/export-ledger', exportGlobalLedger);
 
-// Support & System
-router.get('/tickets',       getTickets);
-router.post('/tickets/:id/reply', replyToTicket);
-router.put('/tickets/:id/resolve', resolveTicket);
+// Support & SLA Governance
+router.get('/tickets',              getTickets);
+router.post('/tickets/:id/reply',    replyToTicket);
+router.put('/tickets/:id/resolve',   resolveTicket);
+router.post('/tickets/:id/escalate', escalateTicket);
+
+// Multi-Channel Emergency Broadcast
+router.post('/broadcast/send', sendEmergencyBroadcast);
+router.get('/broadcast/logs',  getBroadcastLogs);
+
+// DevOps Diagnostics Probe
+router.get('/devops-probe', getDevopsHealthProbe);
+
+// Database Backup & Disaster Recovery
+router.get('/system/backup/preview',  getDatabaseBackupPreview);
+router.get('/system/backup/download', downloadDatabaseBackup);
 
 router.get('/settings',      getSettings);
 router.put('/settings',      updateSettings);
