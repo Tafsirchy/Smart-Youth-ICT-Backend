@@ -112,11 +112,18 @@ syict/
    ```sh
    npm install
    ```
-3. Create `.env` file from `.env.production` or `.env.local` and fill in credentials (MongoDB URI, JWT Secret, Stripe Keys).
+3. Create a `.env` file with your own values (MongoDB URI, JWT Secret, Stripe Keys). Never commit it — `.env*` is git-ignored, and any secret that reaches git history must be treated as compromised and rotated.
 4. Start the server:
    ```sh
    npm run dev
    ```
+
+**CORS allowlist**
+
+The API only accepts browser requests from an exact-match allowlist. The primary
+front-end origin comes from `FRONTEND_URL`; any additional origins (for example
+a preview deployment) must be listed explicitly as a comma-separated value in
+`ALLOWED_ORIGINS`. Requests from any other origin are rejected with `403`.
 
 **Step 2: Setup Frontend**
 1. Navigate to frontend directory:
