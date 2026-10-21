@@ -1,22 +1,28 @@
-// 🚨 EMERGENCY DIAGNOSTIC START 🚨
+// ─── Fatal error handling ─────────────────────────────────────────
+// A process that keeps running after an uncaught exception continues with
+// undefined state. Log the failure and exit so the platform can start a
+// clean instance instead of serving requests from a corrupted one.
 process.on('uncaughtException', (err) => {
-  console.error('🔥 UNCAUGHT EXCEPTION:', err.message);
-  console.error(err.stack);
+  console.error('FATAL uncaught exception:', err?.stack || err);
+  process.exit(1);
 });
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('🧊 UNHANDLED REJECTION at:', promise, 'reason:', reason);
+
+process.on('unhandledRejection', (reason) => {
+  console.error('FATAL unhandled promise rejection:', reason);
+  process.exit(1);
 });
-// 🚨 EMERGENCY DIAGNOSTIC END 🚨
 
 require('dotenv').config();
 const http = require('http');
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const morgan = require('morgan');
 const connectDB = require('./config/db');
 const compression = require('compression');
 const { initSocket } = require('./sockets/socket');
 const errorMiddleware = require('./middleware/error.middleware');
+const { apiLimiter } = require('./middleware/rateLimiter.middleware');
 const { verifyToken } = require('./utils/jwt');
 const SystemSetting = require('./models/SystemSetting');
 
@@ -65,30 +71,59 @@ const PORT = process.env.PORT || 5000;
 
 // ─── Middleware ───────────────────────────────────────────────────
 app.use(compression());
-// Removed broken app.use(apiLimiter) - Root Cause of 500 Crash
+app.use(
+  helmet({
+    // This API only serves JSON, so the document-level CSP belongs to the
+    // Next.js frontend. The remaining headers (HSTS, X-Content-Type-Options,
+    // X-Frame-Options, Referrer-Policy, ...) are applied.
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+    // The API is read cross-origin by the Next.js frontend.
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  }),
+);
 
-const allowedOrigins = [
-  process.env.FRONTEND_URL,
+// ─── CORS ─────────────────────────────────────────────────────────
+// Exact-match allowlist only. Suffix matching (`.vercel.app`,
+// `smartyouthict.com`) previously made the check meaningless because the
+// reject branch allowed every origin as well.
+const STATIC_ORIGINS = [
   'https://syict-frontend.vercel.app',
   'https://smart-youth-ict-frontend.vercel.app',
   'http://localhost:3000',
   'http://localhost:3001',
   'https://www.smartyouthict.com',
-  'https://smartyouthict.com'
-].filter(Boolean);
+  'https://smartyouthict.com',
+];
+
+const normalizeOrigin = (value) => String(value || '').trim().replace(/\/+$/, '');
+
+const allowedOrigins = new Set(
+  [
+    process.env.FRONTEND_URL,
+    ...STATIC_ORIGINS,
+    // Extra origins (e.g. a preview deployment) must be listed explicitly.
+    ...String(process.env.ALLOWED_ORIGINS || '').split(','),
+  ]
+    .map(normalizeOrigin)
+    .filter(Boolean)
+);
 
 const corsOptions = {
   origin: function (origin, callback) {
-    if (
-      !origin ||
-      allowedOrigins.indexOf(origin) !== -1 ||
-      origin.endsWith('.vercel.app') ||
-      origin.endsWith('smartyouthict.com')
-    ) {
-      callback(null, true);
-    } else {
-      callback(null, true);
+    // No Origin header: same-origin navigation, curl, or a server-to-server call.
+    if (!origin) {
+      return callback(null, true);
     }
+
+    const normalized = normalizeOrigin(origin);
+    if (allowedOrigins.has(normalized)) {
+      return callback(null, true);
+    }
+
+    const error = new Error(`Origin '${normalized}' is not allowed by the CORS policy.`);
+    error.status = 403;
+    return callback(error);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
@@ -97,6 +132,11 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
+
+// Global API rate limiting. Kept behind the CORS layer so a rejected origin
+// never consumes a caller's quota, and ahead of the database middleware so
+// abusive traffic is dropped before it reaches MongoDB.
+app.use(apiLimiter);
 
 // ─── Database & Sync Middleware ────────────────────────────────────
 app.use(async (req, res, next) => {
@@ -222,7 +262,8 @@ if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
 
 // ─── HTTP Server & WebSocket Gateway ──────────────────────────────
 const server = http.createServer(app);
-initSocket(server, allowedOrigins);
+// socket.io applies the same exact-match allowlist as the HTTP layer.
+initSocket(server, Array.from(allowedOrigins));
 
 if (process.env.NODE_ENV !== 'production' || process.env.VERCEL_DEV) {
   server.listen(PORT, () => {
