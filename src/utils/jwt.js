@@ -1,6 +1,16 @@
 const jwt = require("jsonwebtoken");
 
 const buildPayload = (userOrPayload) => {
+  const impersonationFields = userOrPayload?.isImpersonating
+    ? {
+        isImpersonating: true,
+        originalAdminId: userOrPayload.originalAdminId,
+        originalAdminName: userOrPayload.originalAdminName,
+        originalAdminEmail: userOrPayload.originalAdminEmail,
+        originalAdminRole: userOrPayload.originalAdminRole,
+      }
+    : {};
+
   if (
     userOrPayload &&
     userOrPayload.ver !== undefined &&
@@ -10,12 +20,14 @@ const buildPayload = (userOrPayload) => {
     return {
       id: userOrPayload.id,
       ver: userOrPayload.ver,
+      ...impersonationFields,
     };
   }
 
   return {
     id: userOrPayload._id?.toString() || userOrPayload.id,
     ver: userOrPayload.tokenVersion || 0,
+    ...impersonationFields,
   };
 };
 
