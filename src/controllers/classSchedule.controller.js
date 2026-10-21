@@ -4,6 +4,7 @@ const User = require('../models/User');
 const Course = require('../models/Course');
 const Enrollment = require('../models/Enrollment');
 const mongoose = require('mongoose');
+const notificationService = require('../services/notification.service');
 
 async function resolveBranchId(param) {
   if (!param) return null;
@@ -247,6 +248,50 @@ exports.createSchedule = async (req, res, next) => {
       .populate('course', 'title thumbnail')
       .populate('branchId', 'name code slug');
 
+    // 🔔 Real-time Notifications for Class Routine
+    try {
+      const courseTitle = populated.course?.title || 'Course';
+      // 1. Notify Enrolled Students
+      notificationService.notifyCourse(course, {
+        title: 'Class Routine Published',
+        message: `Class routine scheduled for "${populated.batchName}" (${courseTitle}): ${dayOfWeek} at ${startTime}-${endTime} in ${roomOrLab}.`,
+        category: 'academic',
+        priority: 'high',
+        type: 'info',
+        link: '/student/routine',
+        actor: req.user._id,
+        metadata: { courseId: course, branchId, branchName: populated.branchId?.name }
+      }).catch(err => console.error('[Notification notifyCourse Schedule failed]', err.message));
+
+      // 2. Notify Instructor / Trainer
+      if (trainer) {
+        notificationService.notifyUser(trainer, {
+          title: 'Class Teaching Routine Assigned',
+          message: `You are scheduled to teach "${populated.batchName}" (${courseTitle}) on ${dayOfWeek} from ${startTime} to ${endTime} (${roomOrLab}).`,
+          category: 'academic',
+          priority: 'high',
+          type: 'info',
+          link: '/instructor/courses',
+          actor: req.user._id,
+          metadata: { courseId: course, branchId, branchName: populated.branchId?.name }
+        }).catch(err => console.error('[Notification notifyTrainer failed]', err.message));
+      }
+
+      // 3. Notify Branch Admins
+      notificationService.notifyBranchAdmins(branchId, {
+        title: 'New Class Schedule Added',
+        message: `Batch "${batchName}" (${courseTitle}) added to schedule for ${dayOfWeek} ${startTime}-${endTime}.`,
+        category: 'administrative',
+        priority: 'normal',
+        type: 'info',
+        link: '/admin/routines',
+        actor: req.user._id,
+        metadata: { courseId: course, branchId, branchName: populated.branchId?.name }
+      }).catch(err => console.error('[Notification notifyBranchAdmins Schedule failed]', err.message));
+    } catch (nErr) {
+      console.error('[Notification createSchedule err]', nErr.message);
+    }
+
     res.status(201).json({ success: true, data: populated });
   } catch (err) {
     next(err);
@@ -320,6 +365,36 @@ exports.updateSchedule = async (req, res, next) => {
       .populate('trainer', 'name email avatar role')
       .populate('course', 'title thumbnail')
       .populate('branchId', 'name code slug');
+
+    // 🔔 Notify Course & Trainer on Schedule Update
+    try {
+      const courseTitle = updated.course?.title || 'Course';
+      notificationService.notifyCourse(updated.course?._id || updated.course, {
+        title: 'Class Routine Updated',
+        message: `Schedule updated for "${updated.batchName}" (${courseTitle}): ${updated.dayOfWeek} at ${updated.startTime}-${updated.endTime} (${updated.roomOrLab}).`,
+        category: 'academic',
+        priority: 'high',
+        type: 'warning',
+        link: '/student/routine',
+        actor: req.user._id,
+        metadata: { courseId: updated.course?._id, branchId: updated.branchId?._id }
+      }).catch(err => console.error('[Notification updateSchedule notifyCourse failed]', err.message));
+
+      if (updated.trainer?._id) {
+        notificationService.notifyUser(updated.trainer._id, {
+          title: 'Teaching Schedule Updated',
+          message: `Routine updated for batch "${updated.batchName}": ${updated.dayOfWeek} at ${updated.startTime}-${updated.endTime}.`,
+          category: 'academic',
+          priority: 'normal',
+          type: 'info',
+          link: '/instructor/courses',
+          actor: req.user._id,
+          metadata: { courseId: updated.course?._id, branchId: updated.branchId?._id }
+        }).catch(err => console.error('[Notification updateSchedule notifyTrainer failed]', err.message));
+      }
+    } catch (nErr) {
+      console.error('[Notification updateSchedule err]', nErr.message);
+    }
 
     res.json({ success: true, data: updated });
   } catch (err) {
