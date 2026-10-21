@@ -24,6 +24,10 @@ const {
   toggleBranchStaffStatus,
   deleteBranchStaff,
   verifyStudentPublic,
+  forceLogoutUser,
+  updateUserPermissions,
+  bulkUserAction,
+  bulkImportUsers,
 } = require('../controllers/user.controller');
 
 // Public listing & verification
@@ -65,5 +69,11 @@ router.delete('/:id',       protect, authorize(...superRoles), adminDeleteUser);
 
 router.patch('/:id/status', protect, authorize(...allManagerRoles), toggleUserStatus);
 router.put('/:id/role',     protect, authorize(...superRoles), updateUserRole);
+router.post('/:id/force-logout', protect, authorize(...superRoles), forceLogoutUser);
+router.put('/:id/permissions',  protect, authorize(...superRoles), updateUserPermissions);
+
+// Enterprise Bulk Operations & Import
+router.post('/bulk-action', protect, authorize(...superRoles), bulkUserAction);
+router.post('/bulk-import', protect, authorize(...superRoles), bulkImportUsers);
 
 module.exports = router;
