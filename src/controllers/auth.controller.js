@@ -520,6 +520,8 @@ const updatePassword = async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+};
+
 // POST /api/auth/impersonate/:userId
 const impersonateUser = async (req, res, next) => {
   try {
@@ -788,7 +790,7 @@ const setupTwoFactor = async (req, res, next) => {
  */
 const enableTwoFactor = async (req, res, next) => {
   try {
-    const { code, method = "email", secret } = req.body;
+    const { code, method = "email" } = req.body;
     if (!code) {
       return res.status(400).json({ success: false, message: "Verification code is required." });
     }
@@ -797,7 +799,9 @@ const enableTwoFactor = async (req, res, next) => {
 
     let isVerified = false;
     if (method === "authenticator") {
-      const activeSecret = secret || user.twoFactorSecret;
+      // The TOTP secret is server-side state. Never trust a client-supplied secret,
+      // otherwise a caller could enable 2FA with a secret they control.
+      const activeSecret = user.twoFactorSecret;
       if (!activeSecret) {
         return res.status(400).json({ success: false, message: "TOTP secret missing. Please restart setup." });
       }
