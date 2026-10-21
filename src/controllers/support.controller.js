@@ -1,4 +1,5 @@
 const SupportTicket = require('../models/SupportTicket');
+const { emitToExecutives } = require('../sockets/socket');
 
 // @desc    Create new support ticket
 // @route   POST /api/support
@@ -15,6 +16,16 @@ exports.createTicket = async (req, res, next) => {
       attachment: attachment || null,
       priority: priority || 'medium',
       status: 'open',
+    });
+
+    // Real-time WebSocket emission to Super Admins & Executives
+    emitToExecutives('NEW_SUPPORT_TICKET', {
+      id: ticket._id,
+      subject: ticket.subject,
+      priority: ticket.priority,
+      category: ticket.category,
+      userName: req.user.name,
+      createdAt: ticket.createdAt,
     });
 
     res.status(201).json({
