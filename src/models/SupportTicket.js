@@ -27,13 +27,30 @@ const supportTicketSchema = new mongoose.Schema(
     },
     priority: {
       type: String,
-      enum: ['low', 'medium', 'high'],
+      enum: ['low', 'medium', 'high', 'critical'],
       default: 'medium',
     },
     status: {
       type: String,
       enum: ['open', 'in-progress', 'resolved', 'closed'],
       default: 'open',
+    },
+    isEscalated: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
+    escalatedAt: {
+      type: Date,
+      default: null
+    },
+    escalationReason: {
+      type: String,
+      default: null
+    },
+    firstResponseAt: {
+      type: Date,
+      default: null
     },
     rating: {
       type: Number,
