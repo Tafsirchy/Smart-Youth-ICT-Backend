@@ -3,6 +3,7 @@ const Submission = require('../models/Submission');
 const Enrollment = require('../models/Enrollment');
 const User = require('../models/User');
 const emailService = require('../services/email.service');
+const notificationService = require('../services/notification.service');
 
 // @desc    Get assignments for a specific course
 // @route   GET /api/assignments/:courseId
@@ -32,7 +33,7 @@ exports.submitAssignment = async (req, res, next) => {
     const assignmentId = req.params.id;
     const { fileUrl, notes } = req.body;
 
-    const assignment = await Assignment.findById(assignmentId);
+    const assignment = await Assignment.findById(assignmentId).populate('course', 'title instructor branchId');
     if (!assignment) return res.status(404).json({ success: false, message: 'Assignment not found' });
     
     if (assignment.status === 'closed') {
@@ -58,6 +59,29 @@ exports.submitAssignment = async (req, res, next) => {
       fileUrl: cleanFileUrl, 
       notes: typeof notes === 'string' ? require('sanitize-html')(notes) : notes,
     });
+
+    // 🔔 Real-time Notification to Instructor
+    try {
+      if (assignment.course?.instructor) {
+        notificationService.notifyUser(assignment.course.instructor, {
+          title: 'New Assignment Submission',
+          message: `${req.user.name || 'A student'} submitted assignment: "${assignment.title}" for ${assignment.course?.title || 'course'}.`,
+          category: 'academic',
+          priority: 'normal',
+          type: 'info',
+          link: '/instructor/submissions',
+          actor: req.user._id,
+          metadata: {
+            assignmentId: assignment._id,
+            courseId: assignment.course?._id,
+            branchId: assignment.course?.branchId || req.user.branchId,
+            actorName: req.user.name
+          }
+        }).catch(err => console.error('[Notification submitAssignment failed]', err.message));
+      }
+    } catch (nErr) {
+      console.error('[Notification submitAssignment err]', nErr.message);
+    }
 
     res.status(201).json({ success: true, data: submission, message: 'Assignment submitted successfully' });
   } catch (err) {
@@ -95,6 +119,43 @@ exports.createAssignment = async (req, res, next) => {
       points,
       status: status || 'active'
     });
+
+    // 🔔 Real-time Notification to Enrolled Students
+    try {
+      const formattedDueDate = dueDate ? new Date(dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'Soon';
+      notificationService.notifyCourse(courseId, {
+        title: 'New Assignment Posted',
+        message: `New assignment "${title}" has been assigned for "${course.title}". Due date: ${formattedDueDate}.`,
+        category: 'academic',
+        priority: 'high',
+        type: 'warning',
+        link: '/student/assignments',
+        actor: req.user._id,
+        metadata: {
+          assignmentId: assignment._id,
+          courseId: course._id,
+          branchId: course.branchId,
+          actorName: req.user.name
+        }
+      }).catch(err => console.error('[Notification notifyCourse failed]', err.message));
+
+      // 🔔 Branch Admin Notification
+      if (course.branchId) {
+        notificationService.notifyBranchAdmins(course.branchId, {
+          title: 'Course Assignment Created',
+          message: `${req.user.name || 'Instructor'} published assignment "${title}" for "${course.title}".`,
+          category: 'academic',
+          priority: 'normal',
+          type: 'info',
+          link: '/admin/courses',
+          actor: req.user._id,
+          metadata: { assignmentId: assignment._id, courseId: course._id, branchId: course.branchId }
+        }).catch(err => console.error('[Notification notifyBranchAdmins failed]', err.message));
+      }
+    } catch (nErr) {
+      console.error('[Notification createAssignment err]', nErr.message);
+    }
+
     res.status(201).json({ success: true, data: assignment });
   } catch (err) {
     next(err);
@@ -123,7 +184,27 @@ exports.gradeSubmission = async (req, res, next) => {
     submission.status = 'graded';
     await submission.save();
 
-    // 📧 Notify Student
+    // 🔔 Real-time Notification to Student
+    try {
+      notificationService.notifyUser(submission.student, {
+        title: 'Assignment Graded',
+        message: `Your assignment "${assignment?.title || 'Submission'}" has been graded: ${grade} points. Feedback: ${feedback ? feedback.substring(0, 80) : 'Evaluated'}`,
+        category: 'academic',
+        priority: 'high',
+        type: 'success',
+        link: '/student/assignments',
+        actor: req.user._id,
+        metadata: {
+          assignmentId: assignment?._id,
+          courseId: assignment?.course?._id || assignment?.course,
+          actorName: req.user.name
+        }
+      }).catch(err => console.error('[Notification gradeSubmission failed]', err.message));
+    } catch (nErr) {
+      console.error('[Notification gradeSubmission err]', nErr.message);
+    }
+
+    // 📧 Notify Student via Email
     try {
       const student = await User.findById(submission.student);
       if (student) {
