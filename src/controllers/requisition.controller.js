@@ -1,6 +1,7 @@
 const Requisition = require('../models/Requisition');
 const Branch = require('../models/Branch');
 const { resolveBranchId } = require('../utils/branchHelper');
+const notificationService = require('../services/notification.service');
 
 // Allowed forward transitions for HQ-managed status updates
 const ALLOWED_TRANSITIONS = {
@@ -154,6 +155,26 @@ exports.createRequisition = async (req, res, next) => {
       .populate('branchId', 'name code city')
       .populate('requestedBy', 'name email');
 
+    // 🔔 Notify Super Admin HQ on New Requisition
+    try {
+      notificationService.notifySuperAdmins({
+        title: 'New Branch Requisition Submitted',
+        message: `${populated.branchId?.name || 'Branch'} requested: "${title}" (${items.length} items).`,
+        category: 'administrative',
+        priority: urgency === 'urgent' ? 'urgent' : 'normal',
+        type: urgency === 'urgent' ? 'warning' : 'info',
+        link: '/super/requisitions',
+        actor: req.user._id,
+        metadata: {
+          requisitionId: requisition._id,
+          requisitionNumber,
+          branchId: targetBranchId,
+          branchName: populated.branchId?.name,
+          actorName: req.user.name
+        }
+      }).catch(err => console.error('[Notification createRequisition failed]', err.message));
+    } catch (e) {}
+
     res.status(201).json({
       success: true,
       data: populated,
@@ -195,12 +216,58 @@ exports.updateRequisitionStatus = async (req, res, next) => {
 
     if (hqNotes) requisition.hqNotes = hqNotes.trim();
 
+    // 📦 Central Warehouse Stock Auto-Deduction Engine
+    if (['approved', 'dispatched'].includes(status) && !requisition.stockDeducted) {
+      const WarehouseItem = require('../models/WarehouseItem');
+      // 1. Verify stock sufficiency for all items first
+      for (const item of requisition.items) {
+        let stockItem = null;
+        if (item.warehouseItemId) {
+          stockItem = await WarehouseItem.findById(item.warehouseItemId);
+        } else {
+          stockItem = await WarehouseItem.findOne({
+            name: { $regex: new RegExp(`^${item.itemName.trim()}$`, 'i') }
+          });
+        }
+
+        if (stockItem) {
+          if (stockItem.stockQuantity < item.quantity) {
+            return res.status(400).json({
+              success: false,
+              message: `Insufficient Central Warehouse stock for "${stockItem.name}". Requested: ${item.quantity}, Available: ${stockItem.stockQuantity}`,
+            });
+          }
+        }
+      }
+
+      // 2. Perform deduction and link warehouseItemId if matched
+      for (const item of requisition.items) {
+        let stockItem = null;
+        if (item.warehouseItemId) {
+          stockItem = await WarehouseItem.findById(item.warehouseItemId);
+        } else {
+          stockItem = await WarehouseItem.findOne({
+            name: { $regex: new RegExp(`^${item.itemName.trim()}$`, 'i') }
+          });
+        }
+
+        if (stockItem) {
+          stockItem.stockQuantity -= item.quantity;
+          await stockItem.save();
+          item.warehouseItemId = stockItem._id;
+        }
+      }
+
+      requisition.stockDeducted = true;
+    }
+
     if (status === 'dispatched') {
       requisition.courierInfo = {
         provider: courierProvider || 'Sundarban Courier Service',
         trackingNumber: trackingNumber || 'N/A',
         dispatchedDate: new Date(),
-        receiptSlipUrl: receiptSlipUrl || ''
+        receiptSlipUrl: receiptSlipUrl || '',
+        deliveryStatus: 'in_transit'
       };
     }
 
@@ -216,6 +283,26 @@ exports.updateRequisitionStatus = async (req, res, next) => {
       .populate('branchId', 'name code city')
       .populate('requestedBy', 'name email')
       .populate('reviewedBy', 'name email');
+
+    // 🔔 Notify Requesting Staff / Branch Admin on Status Update
+    try {
+      if (requisition.requestedBy) {
+        notificationService.notifyUser(requisition.requestedBy, {
+          title: `Requisition ${status.toUpperCase().replace('_', ' ')}`,
+          message: `Your requisition #${requisition.requisitionNumber} ("${requisition.title}") has been ${status}.${trackingNumber ? ' Tracking: ' + trackingNumber : ''}`,
+          category: 'administrative',
+          priority: 'high',
+          type: status === 'rejected' ? 'error' : 'success',
+          link: '/admin/requisitions',
+          actor: req.user._id,
+          metadata: {
+            requisitionId: requisition._id,
+            requisitionNumber: requisition.requisitionNumber,
+            branchId: requisition.branchId
+          }
+        }).catch(err => console.error('[Notification updateRequisitionStatus failed]', err.message));
+      }
+    } catch (e) {}
 
     res.json({
       success: true,
@@ -269,6 +356,24 @@ exports.markRequisitionReceived = async (req, res, next) => {
       .populate('requestedBy', 'name email')
       .populate('receivedBy', 'name email');
 
+    // 🔔 Notify Super Admin HQ that parcel reached campus
+    try {
+      notificationService.notifySuperAdmins({
+        title: 'Parcel Received at Branch Campus',
+        message: `Consignment for requisition #${requisition.requisitionNumber} ("${requisition.title}") was safely received at destination campus.`,
+        category: 'administrative',
+        priority: 'normal',
+        type: 'success',
+        link: '/super/requisitions',
+        actor: req.user._id,
+        metadata: {
+          requisitionId: requisition._id,
+          requisitionNumber: requisition.requisitionNumber,
+          branchId: requisition.branchId
+        }
+      }).catch(err => console.error('[Notification markRequisitionReceived failed]', err.message));
+    } catch (e) {}
+
     res.json({
       success: true,
       data: updated,
@@ -307,3 +412,228 @@ exports.deleteRequisition = async (req, res, next) => {
     next(err);
   }
 };
+
+const WarehouseItem = require('../models/WarehouseItem');
+
+// @desc    Get Central Warehouse inventory with KPI metrics (Super Admin)
+// @route   GET /api/requisitions/warehouse/items
+// @access  Private (super_admin, super_management)
+exports.getWarehouseInventory = async (req, res, next) => {
+  try {
+    let items = await WarehouseItem.find().sort('name').lean();
+
+    // Auto-seed default warehouse items if database table is initially empty
+    if (items.length === 0) {
+      const defaultItems = [
+        {
+          name: 'Smart Python & AI Course Book (Vol 1)',
+          sku: 'BK-PY-01',
+          category: 'books',
+          stockQuantity: 250,
+          minStockAlert: 30,
+          unitCost: 450,
+          unit: 'pcs',
+          location: 'HQ Warehouse Shelf A-1',
+          description: 'Official printed course textbook for Python & Machine Learning.',
+        },
+        {
+          name: 'SYICT Official Student T-Shirt (Navy Blue)',
+          sku: 'TS-NV-01',
+          category: 'merchandise',
+          stockQuantity: 320,
+          minStockAlert: 50,
+          unitCost: 350,
+          unit: 'pcs',
+          location: 'HQ Warehouse Rack B-2',
+          description: '100% Cotton combed student welcome package apparel.',
+        },
+        {
+          name: 'Digital Student ID Card & Lanyard Set',
+          sku: 'ID-LN-01',
+          category: 'id_card',
+          stockQuantity: 500,
+          minStockAlert: 100,
+          unitCost: 120,
+          unit: 'sets',
+          location: 'HQ Warehouse Cabinet C-1',
+          description: 'RFID-embedded physical ID card and branded lanyard.',
+        },
+        {
+          name: 'Full Stack Web Development Lab Kit',
+          sku: 'KT-WD-01',
+          category: 'kits',
+          stockQuantity: 140,
+          minStockAlert: 25,
+          unitCost: 850,
+          unit: 'kits',
+          location: 'HQ Warehouse Shelf D-3',
+          description: 'Physical cheat sheets, notebook, and USB recovery resources.',
+        },
+      ];
+      await WarehouseItem.insertMany(defaultItems);
+      items = await WarehouseItem.find().sort('name').lean();
+    }
+
+    const totalItems = items.length;
+    const lowStockCount = items.filter(i => i.stockQuantity <= i.minStockAlert).length;
+    const totalStockUnits = items.reduce((sum, i) => sum + (i.stockQuantity || 0), 0);
+    const totalValuation = items.reduce((sum, i) => sum + ((i.stockQuantity || 0) * (i.unitCost || 0)), 0);
+
+    res.json({
+      success: true,
+      metrics: {
+        totalItems,
+        lowStockCount,
+        totalStockUnits,
+        totalValuation,
+      },
+      data: items,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc    Create new Central Warehouse Item
+// @route   POST /api/requisitions/warehouse/items
+// @access  Private (super_admin, super_management)
+exports.createWarehouseItem = async (req, res, next) => {
+  try {
+    const { name, sku, category, stockQuantity, minStockAlert, unitCost, unit, location, description } = req.body;
+    if (!name || !sku) {
+      return res.status(400).json({ success: false, message: 'Item name and unique SKU are required' });
+    }
+
+    const item = await WarehouseItem.create({
+      name: name.trim(),
+      sku: sku.trim().toUpperCase(),
+      category: category || 'stationery',
+      stockQuantity: Number(stockQuantity) || 0,
+      minStockAlert: Number(minStockAlert) || 20,
+      unitCost: Number(unitCost) || 0,
+      unit: unit || 'pcs',
+      location: location || 'Central HQ Warehouse',
+      description: description || '',
+    });
+
+    res.status(201).json({
+      success: true,
+      data: item,
+      message: `Warehouse item "${item.name}" registered successfully`,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc    Update or restock warehouse item
+// @route   PUT /api/requisitions/warehouse/items/:id
+// @access  Private (super_admin, super_management)
+exports.updateWarehouseItem = async (req, res, next) => {
+  try {
+    const item = await WarehouseItem.findByIdAndUpdate(
+      req.params.id,
+      { $set: req.body },
+      { new: true, runValidators: true }
+    );
+    if (!item) {
+      return res.status(404).json({ success: false, message: 'Warehouse item not found' });
+    }
+
+    res.json({
+      success: true,
+      data: item,
+      message: `Warehouse item "${item.name}" updated successfully`,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc    Courier Delivery Webhook Receiver (Steadfast / Pathao / RedX / Generic)
+// @route   POST /api/webhooks/courier
+// @access  Public (Webhook)
+exports.courierWebhook = async (req, res, next) => {
+  try {
+    const { trackingNumber, consignment_id, status, provider = 'Steadfast Courier' } = req.body;
+    const trackId = trackingNumber || consignment_id;
+
+    if (!trackId) {
+      return res.status(400).json({ success: false, message: 'trackingNumber or consignment_id required' });
+    }
+
+    const requisition = await Requisition.findOne({
+      $or: [
+        { 'courierInfo.trackingNumber': trackId },
+        { requisitionNumber: trackId }
+      ]
+    });
+
+    if (!requisition) {
+      return res.status(404).json({ success: false, message: 'No requisition matching courier tracking number' });
+    }
+
+    const normalizedStatus = String(status).toLowerCase();
+    requisition.courierInfo.courierPayload = req.body;
+
+    if (['delivered', 'success', 'received'].includes(normalizedStatus)) {
+      requisition.status = 'received';
+      requisition.receivedAt = new Date();
+      requisition.courierInfo.deliveryStatus = 'delivered';
+      requisition.receivingNotes = `Auto-marked received via ${provider} delivery webhook API.`;
+      requisition.statusHistory.push({
+        status: 'received',
+        note: `Courier confirmed parcel delivery: Consignment ${trackId}`
+      });
+      await requisition.save();
+    } else if (['in_transit', 'picked_up', 'dispatched'].includes(normalizedStatus)) {
+      requisition.courierInfo.deliveryStatus = 'in_transit';
+      await requisition.save();
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Webhook processed. Requisition ${requisition.requisitionNumber} is now ${requisition.status}.`
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc    Simulate courier delivery for testing (Super Admin)
+// @route   POST /api/requisitions/:id/simulate-delivery
+// @access  Private (super_admin, super_management)
+exports.simulateCourierWebhook = async (req, res, next) => {
+  try {
+    const requisition = await Requisition.findById(req.params.id);
+    if (!requisition) {
+      return res.status(404).json({ success: false, message: 'Requisition not found' });
+    }
+
+    requisition.status = 'received';
+    requisition.receivedAt = new Date();
+    requisition.receivedBy = req.user._id;
+    requisition.courierInfo.deliveryStatus = 'delivered';
+    requisition.receivingNotes = `Simulated automated courier webhook delivery confirmed by ${req.user.name}.`;
+    requisition.statusHistory.push({
+      status: 'received',
+      updatedBy: req.user._id,
+      note: 'Simulated Courier Webhook: Consignment delivered to destination campus.'
+    });
+
+    await requisition.save();
+
+    const updated = await Requisition.findById(requisition._id)
+      .populate('branchId', 'name code city')
+      .populate('requestedBy', 'name email');
+
+    res.json({
+      success: true,
+      data: updated,
+      message: `Requisition ${requisition.requisitionNumber} marked received via simulated courier webhook.`,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
