@@ -5,11 +5,10 @@ const User = require('../models/User');
 const stripeService = require('../services/payment/stripe.service');
 const bkashService = require('../services/payment/bkash.service');
 const nagadService = require('../services/payment/nagad.service');
-const whatsappService = require('../services/whatsapp.service');
-const smsService      = require('../services/sms.service');
 const emailService    = require('../services/email.service');
 const { validateCouponForAmount, consumeCouponUsage } = require('../services/coupon.service');
 const notificationService = require('../services/notification.service');
+const { sanitizeCsvCell } = require('../utils/csv');
 
 /**
  * Real-time In-App, Socket, and Audit Notifications on Payment Success
@@ -117,7 +116,7 @@ const redeemPaymentCoupon = async (payment) => {
  */
 const initializeCheckout = async (req, res, next) => {
   try {
-    const { courseId, paymentMethod, isInstallment, couponCode } = req.body;
+    const { courseId, paymentMethod, couponCode } = req.body;
     const user = req.user;
 
     const course = await Course.findById(courseId);
@@ -176,11 +175,29 @@ const initializeCheckout = async (req, res, next) => {
       paymentUrl = sessionData.url;
     } else if (paymentMethod === 'bkash') {
       const callbackUrl = `${process.env.FRONTEND_URL}/api/webhooks/bkash/callback`;
-      const bkashData = await bkashService.createPayment(amount, invoiceNumber, callbackUrl);
+      let bkashData;
+      try {
+        bkashData = await bkashService.createPayment(amount, invoiceNumber, callbackUrl);
+      } catch (gatewayError) {
+        req.log?.error('bkash checkout failed', { err: gatewayError });
+        return res.status(503).json({
+          success: false,
+          message: 'bKash payments are currently unavailable. Please choose another payment method.',
+        });
+      }
       paymentUrl = bkashData.bkashURL;
     } else if (paymentMethod === 'nagad') {
       const callbackUrl = `${process.env.FRONTEND_URL}/api/webhooks/nagad/callback`;
-      const nagadData = await nagadService.createPayment(amount, invoiceNumber, callbackUrl);
+      let nagadData;
+      try {
+        nagadData = await nagadService.createPayment(amount, invoiceNumber, callbackUrl);
+      } catch (gatewayError) {
+        req.log?.error('nagad checkout failed', { err: gatewayError });
+        return res.status(503).json({
+          success: false,
+          message: 'Nagad payments are currently unavailable. Please choose another payment method.',
+        });
+      }
       paymentUrl = nagadData.paymentURL;
     } else if (paymentMethod === 'bank') {
       // Manual bank logic handles directly via frontend UI forms returning a pending approval state
@@ -367,18 +384,18 @@ const exportPaymentsCSV = async (req, res, next) => {
       const fee = p.gatewayFee || calculateGatewayFee(p.method, p.amount).fee;
       const net = p.netAmount || Math.max(0, (p.amount || 0) - fee);
       return [
-        `"${p.transactionId || p._id}"`,
-        `"${studentName}"`,
-        `"${studentEmail}"`,
-        `"${studentPhone}"`,
-        `"${courseTitle}"`,
-        `"${branchName}"`,
-        `"${p.method || 'Unknown'}"`,
-        p.amount || 0,
-        fee,
-        net,
-        `"${p.status}"`,
-        `="${date}"`
+        sanitizeCsvCell(p.transactionId || p._id),
+        sanitizeCsvCell(studentName),
+        sanitizeCsvCell(studentEmail),
+        sanitizeCsvCell(studentPhone),
+        sanitizeCsvCell(courseTitle),
+        sanitizeCsvCell(branchName),
+        sanitizeCsvCell(p.method || 'Unknown'),
+        Number(p.amount || 0),
+        Number(fee || 0),
+        Number(net || 0),
+        sanitizeCsvCell(p.status),
+        sanitizeCsvCell(date)
       ].join(',');
     });
 
@@ -486,7 +503,15 @@ const bkashCallback = async (req, res, next) => {
                await emailService.sendPaymentReceipt(userObj, payment);
              }
              dispatchPaymentSuccessNotifications(payment, null, userObj);
-          } catch(e) {}
+          } catch(e) {
+            // The payment is already completed and the enrollment activated;
+            // only the receipt and the notifications are missing.
+            req.log?.error('bkash payment receipt notification failed', {
+              paymentId: payment._id,
+              transactionId: payment.transactionId,
+              err: e,
+            });
+          }
         }
         
         // 🛡️ Security Fix: Strict Redirect White-listing
@@ -540,7 +565,15 @@ const nagadCallback = async (req, res, next) => {
                await emailService.sendPaymentReceipt(userObj, payment);
              }
              dispatchPaymentSuccessNotifications(payment, null, userObj);
-          } catch(e) {}
+          } catch(e) {
+            // The payment is already completed and the enrollment activated;
+            // only the receipt and the notifications are missing.
+            req.log?.error('nagad payment receipt notification failed', {
+              paymentId: payment._id,
+              transactionId: payment.transactionId,
+              err: e,
+            });
+          }
         }
         
         // 🛡️ Security Fix: Strict Redirect White-listing
@@ -590,7 +623,13 @@ const replayPaymentWebhook = async (req, res, next) => {
     // 🔔 Real-time Notification Dispatch
     try {
       dispatchPaymentSuccessNotifications(payment, payment.course, payment.user);
-    } catch (e) {}
+    } catch (e) {
+      // The payment is fulfilled; the notification is best effort.
+      req.log?.error('payment replay notification failed', {
+        paymentId: payment._id,
+        err: e,
+      });
+    }
 
     // Record AuditLog
     const AuditLog = require('../models/AuditLog');
