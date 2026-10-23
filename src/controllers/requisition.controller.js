@@ -1,6 +1,7 @@
 const Requisition = require('../models/Requisition');
 const Branch = require('../models/Branch');
 const { resolveBranchId } = require('../utils/branchHelper');
+const { escapeRegex } = require('../utils/regex');
 const notificationService = require('../services/notification.service');
 
 // Allowed forward transitions for HQ-managed status updates
@@ -87,7 +88,6 @@ exports.createRequisition = async (req, res, next) => {
       });
     }
 
-    const isSuper = ['super_admin', 'super_management'].includes(req.user.role);
     const targetBranchId = resolveBranchId(req, requestedBranchId);
 
     if (!targetBranchId) {
@@ -173,7 +173,14 @@ exports.createRequisition = async (req, res, next) => {
           actorName: req.user.name
         }
       }).catch(err => console.error('[Notification createRequisition failed]', err.message));
-    } catch (e) {}
+    } catch (e) {
+      // The requisition is stored; a failed notification only means Central HQ
+      // was not told about it yet.
+      req.log?.error('requisition created notification failed', {
+        requisitionId: requisition._id,
+        err: e,
+      });
+    }
 
     res.status(201).json({
       success: true,
@@ -225,8 +232,9 @@ exports.updateRequisitionStatus = async (req, res, next) => {
         if (item.warehouseItemId) {
           stockItem = await WarehouseItem.findById(item.warehouseItemId);
         } else {
+          const escapedName = escapeRegex(item.itemName.trim());
           stockItem = await WarehouseItem.findOne({
-            name: { $regex: new RegExp(`^${item.itemName.trim()}$`, 'i') }
+            name: { $regex: new RegExp(`^${escapedName}$`, 'i') }
           });
         }
 
@@ -246,8 +254,9 @@ exports.updateRequisitionStatus = async (req, res, next) => {
         if (item.warehouseItemId) {
           stockItem = await WarehouseItem.findById(item.warehouseItemId);
         } else {
+          const escapedName = escapeRegex(item.itemName.trim());
           stockItem = await WarehouseItem.findOne({
-            name: { $regex: new RegExp(`^${item.itemName.trim()}$`, 'i') }
+            name: { $regex: new RegExp(`^${escapedName}$`, 'i') }
           });
         }
 
@@ -302,7 +311,14 @@ exports.updateRequisitionStatus = async (req, res, next) => {
           }
         }).catch(err => console.error('[Notification updateRequisitionStatus failed]', err.message));
       }
-    } catch (e) {}
+    } catch (e) {
+      // The status change is stored; the requester may not have been told.
+      req.log?.error('requisition status notification failed', {
+        requisitionId: updated._id,
+        status,
+        err: e,
+      });
+    }
 
     res.json({
       success: true,
@@ -372,7 +388,13 @@ exports.markRequisitionReceived = async (req, res, next) => {
           branchId: requisition.branchId
         }
       }).catch(err => console.error('[Notification markRequisitionReceived failed]', err.message));
-    } catch (e) {}
+    } catch (e) {
+      // The receipt is stored; Central HQ may not have been told.
+      req.log?.error('requisition received notification failed', {
+        requisitionId: updated._id,
+        err: e,
+      });
+    }
 
     res.json({
       success: true,
@@ -617,6 +639,19 @@ exports.updateWarehouseItem = async (req, res, next) => {
 // @access  Public (Webhook)
 exports.courierWebhook = async (req, res, next) => {
   try {
+    const configuredSecret = process.env.COURIER_WEBHOOK_SECRET;
+    if (configuredSecret) {
+      const incomingToken =
+        req.headers['x-courier-token'] ||
+        req.headers['x-webhook-secret'] ||
+        req.headers.authorization?.replace(/^Bearer\s+/i, '') ||
+        req.query.token;
+
+      if (!incomingToken || incomingToken !== configuredSecret) {
+        return res.status(401).json({ success: false, message: 'Invalid or missing courier webhook authorization' });
+      }
+    }
+
     const { trackingNumber, consignment_id, status, provider = 'Steadfast Courier' } = req.body;
     const trackId = trackingNumber || consignment_id;
 
