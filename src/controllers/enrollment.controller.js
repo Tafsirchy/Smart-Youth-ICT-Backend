@@ -99,16 +99,18 @@ exports.createEnrollment = async (req, res, next) => {
     });
 
     // Notify Student & Instructor
+    let course = null;
     try {
-      const [user, course] = await Promise.all([
+      const [user, fetchedCourse] = await Promise.all([
         User.findById(userId),
         Course.findById(courseId)
       ]);
+      course = fetchedCourse;
       if (user && course) {
         emailService.sendEnrollmentConfirm(user, course)
-          .catch(e => console.error('[Enrollment Email Failed]', e.message));
+          .catch(e => req.log?.error('enrollment confirmation email failed', { courseId, err: e }));
 
-        // 🔔 In-App Notification to Student
+        // ðŸ”” In-App Notification to Student
         notificationService.notifyUser(userId, {
           title: 'Enrollment Confirmed',
           message: `You have been enrolled in "${course.title}". You can now access your learning modules and assignments!`,
@@ -117,9 +119,9 @@ exports.createEnrollment = async (req, res, next) => {
           type: 'success',
           link: '/student/my-courses',
           metadata: { courseId: course._id, branchId: targetBranch, actorName: req.user.name }
-        }).catch(err => console.error('[Enrollment In-App Notification Failed]', err.message));
+        }).catch(err => req.log?.error('enrollment in-app notification failed', { courseId, err }));
 
-        // 🔔 Notification to Instructor if assigned
+        // ðŸ”” Notification to Instructor if assigned
         if (course.instructor) {
           notificationService.notifyUser(course.instructor, {
             title: 'New Student Enrolled',
@@ -129,10 +131,10 @@ exports.createEnrollment = async (req, res, next) => {
             type: 'info',
             link: '/instructor/courses',
             metadata: { courseId: course._id, branchId: targetBranch, studentId: user._id }
-          }).catch(err => console.error('[Instructor Enrollment Notification Failed]', err.message));
+          }).catch(err => req.log?.error('instructor enrollment notification failed', { courseId, err }));
         }
 
-        // 🔔 Notification to Branch Admins
+        // ðŸ”” Notification to Branch Admins
         notificationService.notifyBranchAdmins(targetBranch, {
           title: 'Student Enrolled',
           message: `${user.name || 'Student'} enrolled in "${course.title}".`,
@@ -141,9 +143,17 @@ exports.createEnrollment = async (req, res, next) => {
           type: 'info',
           link: '/admin/students',
           metadata: { courseId: course._id, studentId: user._id }
-        }).catch(err => console.error('[Branch Admin Enrollment Notification Failed]', err.message));
+        }).catch(err => req.log?.error('branch admin enrollment notification failed', { courseId, branchId: targetBranch, err }));
       }
-    } catch(e) {}
+    } catch(e) {
+      // The enrollment is already stored; a failed notification only means
+      // the confirmation message did not reach the student or the admin.
+      req.log?.error('enrollment notification failed', {
+        enrollmentId: enrollment._id,
+        courseId: course?._id || courseId,
+        err: e,
+      });
+    }
 
     res.status(201).json({ success: true, data: enrollment });
   } catch (err) {
