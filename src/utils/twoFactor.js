@@ -164,7 +164,7 @@ function verify2FATempToken(token) {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     if (decoded.purpose !== "2fa_verification") return null;
     return decoded;
-  } catch (err) {
+  } catch {
     return null;
   }
 }
