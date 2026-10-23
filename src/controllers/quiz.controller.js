@@ -35,8 +35,8 @@ exports.getQuizDetails = async (req, res, next) => {
 
     // Remove correct answers from response if requested by a student
     if (req.user.role === 'student') {
-      const sanitizedQuestions = quiz.questions.map(q => {
-        const { correctOptions, ...safeQ } = q.toObject();
+      const sanitizedQuestions = quiz.questions.map((q) => {
+        const { correctOptions: _correctOptions, ...safeQ } = q.toObject();
         return safeQ;
       });
       return res.json({ success: true, data: { ...quiz.toObject(), questions: sanitizedQuestions } });
