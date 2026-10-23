@@ -1,25 +1,38 @@
 const mongoose = require('mongoose');
 const Seminar = require('../models/Seminar');
 const SeminarRegistration = require('../models/SeminarRegistration');
-const Branch = require('../models/Branch');
 const emailService = require('../services/email.service');
-const { isBranchAuthorized } = require('../middleware/rbac.middleware');
+const {
+  isBranchAuthorized,
+  resolveBranchScope,
+  resolveBranchReference,
+} = require('../utils/branchHelper');
+const { escapeRegex } = require('../utils/regex');
 
-// Helper to resolve Branch ObjectId from ID, slug, or code
-async function resolveBranchId(target) {
-  if (!target) return null;
-  if (mongoose.Types.ObjectId.isValid(target)) {
-    const doc = await Branch.findById(target).lean();
-    if (doc) return doc._id;
-  }
-  const bySlugOrCode = await Branch.findOne({
-    $or: [
-      { slug: target },
-      { code: target.toString().toUpperCase() }
-    ]
-  }).lean();
-  return bySlugOrCode ? bySlugOrCode._id : (mongoose.Types.ObjectId.isValid(target) ? target : null);
-}
+// Fields a seminar owner may change. `branchId`, `createdBy` and
+// `registeredCount` are server owned and must never come from the body.
+const UPDATABLE_SEMINAR_FIELDS = [
+  'title',
+  'description',
+  'date',
+  'time',
+  'venue',
+  'mode',
+  'meetingLink',
+  'speaker',
+  'maxSeats',
+  'banner',
+  'topics',
+  'status',
+  'isPublished',
+  'featured',
+];
+
+const pickUpdatableSeminarFields = (body = {}) =>
+  UPDATABLE_SEMINAR_FIELDS.reduce((acc, field) => {
+    if (body[field] !== undefined) acc[field] = body[field];
+    return acc;
+  }, {});
 
 // @desc    Create a seminar for a branch (admin/staff/super_admin)
 // @route   POST /api/seminars
@@ -28,13 +41,14 @@ exports.createSeminar = async (req, res, next) => {
   try {
     const isSuper = ['super_admin', 'super_management'].includes(req.user.role);
     const targetBranchInput = isSuper ? (req.body.branchId || req.query.branchId) : req.user.branchId;
-    const branchId = await resolveBranchId(targetBranchInput);
+    const scope = await resolveBranchScope(req, targetBranchInput);
+    const branchId = scope.branchId;
 
     if (!branchId) {
       return res.status(400).json({ success: false, message: 'Valid branch reference is required' });
     }
 
-    if (!isSuper && !isBranchAuthorized(req, branchId)) {
+    if (scope.denied) {
       return res.status(403).json({ success: false, message: 'Unauthorized branch access' });
     }
 
@@ -92,7 +106,7 @@ exports.getSeminars = async (req, res, next) => {
     const filter = {};
 
     if (branchId) {
-      const resolved = await resolveBranchId(branchId);
+      const resolved = await resolveBranchReference(branchId);
       if (resolved) filter.branchId = resolved;
     }
 
@@ -105,10 +119,11 @@ exports.getSeminars = async (req, res, next) => {
     }
 
     if (search) {
+      const escaped = escapeRegex(search);
       filter.$or = [
-        { title: new RegExp(search, 'i') },
-        { description: new RegExp(search, 'i') },
-        { 'speaker.name': new RegExp(search, 'i') },
+        { title: new RegExp(escaped, 'i') },
+        { description: new RegExp(escaped, 'i') },
+        { 'speaker.name': new RegExp(escaped, 'i') },
       ];
     }
 
@@ -146,7 +161,11 @@ exports.updateSeminar = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Unauthorized branch access' });
     }
 
-    const updates = req.body;
+    const updates = pickUpdatableSeminarFields(req.body);
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ success: false, message: 'No updatable fields provided' });
+    }
+
     if (updates.topics && typeof updates.topics === 'string') {
       updates.topics = updates.topics.split(',').map(t => t.trim());
     }
@@ -196,7 +215,7 @@ exports.registerForSeminar = async (req, res, next) => {
       }
     }
 
-    const resolvedBranch = await resolveBranchId(targetBranchId);
+    const resolvedBranch = await resolveBranchReference(targetBranchId);
 
     // Prevent duplicate registrations by phone + seminar
     const existing = await SeminarRegistration.findOne({ phone, seminar: seminarTitle });
@@ -247,14 +266,17 @@ exports.getAllRegistrations = async (req, res, next) => {
     const targetBranchInput = isSuper ? branchId : req.user.branchId;
 
     if (targetBranchInput) {
-      const resolved = await resolveBranchId(targetBranchInput);
-      if (resolved) filter.branchId = resolved;
+      const scope = await resolveBranchScope(req, targetBranchInput);
+      if (scope.denied) {
+        return res.status(403).json({ success: false, message: 'Unauthorized branch access' });
+      }
+      if (scope.branchId) filter.branchId = scope.branchId;
     }
 
     if (seminarId && mongoose.Types.ObjectId.isValid(seminarId)) {
       filter.seminarId = seminarId;
     }
-    if (seminar) filter.seminar = new RegExp(seminar, 'i');
+    if (seminar) filter.seminar = new RegExp(escapeRegex(seminar), 'i');
     if (attendanceStatus) filter.attendanceStatus = attendanceStatus;
     if (attended !== undefined) filter.attended = attended === 'true';
 
@@ -278,7 +300,15 @@ exports.markAttended = async (req, res, next) => {
     const reg = await SeminarRegistration.findById(req.params.id);
     if (!reg) return res.status(404).json({ success: false, message: 'Registration not found' });
 
-    if (reg.branchId && !isBranchAuthorized(req, reg.branchId)) {
+    // A registration created through the public form may carry no branch of
+    // its own — fall back to the branch of the seminar it belongs to.
+    let ownerBranchId = reg.branchId;
+    if (!ownerBranchId && reg.seminarId) {
+      const seminar = await Seminar.findById(reg.seminarId).select('branchId').lean();
+      ownerBranchId = seminar?.branchId;
+    }
+
+    if (ownerBranchId && !isBranchAuthorized(req, ownerBranchId)) {
       return res.status(403).json({ success: false, message: 'Unauthorized branch access' });
     }
 
