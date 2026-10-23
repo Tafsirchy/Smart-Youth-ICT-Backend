@@ -1,6 +1,61 @@
 const { Server } = require('socket.io');
+const { authenticateToken } = require('../middleware/auth.middleware');
+const { getAllowedBranches, isSuperRole } = require('../utils/branchHelper');
+const { logger, createRequestId } = require('../utils/logger');
+const Enrollment = require('../models/Enrollment');
+const Course = require('../models/Course');
 
 let io = null;
+
+/**
+ * The course rooms a user is entitled to. Derived from the server-side
+ * relationship between the account and the course — never from anything the
+ * client sends.
+ */
+const resolveCourseRooms = async (user) => {
+  const courseIds = new Set();
+
+  if (user.role === 'student') {
+    const enrollments = await Enrollment.find({ user: user._id, isActive: true })
+      .select('course')
+      .lean();
+    enrollments.forEach((e) => e.course && courseIds.add(e.course.toString()));
+  }
+
+  if (user.role === 'instructor') {
+    const courses = await Course.find({ instructor: user._id })
+      .select('_id')
+      .lean();
+    courses.forEach((c) => courseIds.add(c._id.toString()));
+  }
+
+  return [...courseIds];
+};
+
+/**
+ * Whether a user may listen to a course room. Super roles may listen to any
+ * course; everyone else needs an enrolment or a teaching assignment.
+ */
+const canListenToCourse = async (user, courseId) => {
+  if (!courseId) return false;
+  if (isSuperRole(user)) return true;
+
+  if (user.role === 'student') {
+    const enrollment = await Enrollment.exists({
+      user: user._id,
+      course: courseId,
+      isActive: true,
+    });
+    return Boolean(enrollment);
+  }
+
+  if (user.role === 'instructor') {
+    const course = await Course.exists({ _id: courseId, instructor: user._id });
+    return Boolean(course);
+  }
+
+  return false;
+};
 
 /**
  * Initialize Socket.io with HTTP server
@@ -33,7 +88,7 @@ const initSocket = (httpServer, isAllowedOrigin) => {
         typeof isAllowedOrigin === 'function' ? Boolean(isAllowedOrigin(origin)) : false;
 
       if (!allowed) {
-        console.warn('[Socket] Rejected connection from disallowed origin:', origin);
+        logger.warn('socket connection rejected: disallowed origin', { origin });
       }
 
       callback(null, allowed);
@@ -42,83 +97,116 @@ const initSocket = (httpServer, isAllowedOrigin) => {
     pingInterval: 15000,
   });
 
+  // Every socket must present a valid access token. The account behind the
+  // token is loaded once and attached to the socket; every room subscription
+  // afterwards is derived from that account rather than from client input.
+  io.use(async (socket, next) => {
+    try {
+      const handshake = socket.handshake || {};
+      const headerToken =
+        typeof handshake.headers?.authorization === 'string'
+          ? handshake.headers.authorization.replace(/^Bearer\s+/i, '')
+          : null;
+
+      const token = handshake.auth?.token || handshake.query?.token || headerToken;
+
+      if (!token) {
+        return next(new Error('Authentication required'));
+      }
+
+      const { user } = await authenticateToken(token);
+      socket.data.user = user;
+      socket.data.requestId = createRequestId();
+      socket.data.log = logger.child({
+        requestId: socket.data.requestId,
+        userId: user._id ? user._id.toString() : undefined,
+        branchId: user.branchId ? user.branchId.toString() : undefined,
+        role: user.role,
+      });
+      next();
+    } catch (err) {
+      next(new Error(err?.message || 'Authentication failed'));
+    }
+  });
+
   io.on('connection', (socket) => {
-    // Client registers identity & joins appropriate role/branch/course rooms
-    socket.on('join_enterprise', (data) => {
+    const user = socket.data.user;
+    const socketLog = socket.data.log || logger;
+
+    // Client registers identity & joins appropriate role/branch/course rooms.
+    // The payload is intentionally ignored: identity comes from the token.
+    socket.on('join_enterprise', async (payload, maybeAck) => {
+      // The acknowledgement callback may arrive as the first or the second
+      // argument, depending on whether the client sent a payload.
+      const ack = typeof payload === 'function' ? payload : maybeAck;
       try {
-        if (data?.userId) {
-          socket.join(`user_${data.userId}`);
+        if (!user) {
+          if (typeof ack === 'function') ack({ ok: false, message: 'Not authenticated' });
+          return;
         }
 
-        if (data?.role) {
-          socket.join(`role_${data.role}`);
-          if (['super_admin', 'super_management'].includes(data.role)) {
+        socket.join(`user_${user._id}`);
+
+        if (user.role) {
+          socket.join(`role_${user.role}`);
+          if (isSuperRole(user)) {
             socket.join('room_executives');
           }
         }
 
-        if (data?.branchId) {
-          socket.join(`branch_${data.branchId}`);
-          if (data?.role) {
-            socket.join(`branch_${data.branchId}_${data.role}s`);
-            if (['branch_admin', 'branch_management'].includes(data.role)) {
-              socket.join(`branch_${data.branchId}_admins`);
+        // Only the branches this account may act within.
+        const allowedBranches = getAllowedBranches(user);
+        allowedBranches.forEach((branchId) => {
+          socket.join(`branch_${branchId}`);
+          if (user.role) {
+            socket.join(`branch_${branchId}_${user.role}s`);
+            if (['branch_admin', 'branch_management'].includes(user.role)) {
+              socket.join(`branch_${branchId}_admins`);
             }
-            if (data.role === 'employee') {
-              socket.join(`branch_${data.branchId}_employees`);
+            if (user.role === 'employee') {
+              socket.join(`branch_${branchId}_employees`);
             }
           }
-        }
+        });
 
         // Auto-join enrolled or taught courses
-        if (Array.isArray(data?.courseIds) && data.courseIds.length > 0) {
-          data.courseIds.forEach((cId) => {
-            if (cId) socket.join(`course_${cId}`);
-          });
-        } else if (data?.userId) {
-          // Server-side autonomous course room join
-          if (data.role === 'student') {
-            try {
-              const Enrollment = require('../models/Enrollment');
-              Enrollment.find({ user: data.userId, isActive: true })
-                .distinct('course')
-                .then((cIds) => {
-                  cIds.forEach((cId) => {
-                    if (cId) socket.join(`course_${cId.toString()}`);
-                  });
-                })
-                .catch(() => {});
-            } catch (e) {}
-          } else if (data.role === 'instructor') {
-            try {
-              const Course = require('../models/Course');
-              Course.find({ instructor: data.userId })
-                .distinct('_id')
-                .then((cIds) => {
-                  cIds.forEach((cId) => {
-                    if (cId) socket.join(`course_${cId.toString()}`);
-                  });
-                })
-                .catch(() => {});
-            } catch (e) {}
-          }
-        }
+        const courseIds = await resolveCourseRooms(user);
+        courseIds.forEach((cId) => socket.join(`course_${cId}`));
+
+        if (typeof ack === 'function') ack({ ok: true });
       } catch (e) {
-        console.error('[Socket Join Error]', e.message);
+        socketLog.error('socket enterprise join failed', { err: e });
+        if (typeof ack === 'function') ack({ ok: false, message: e.message });
       }
     });
 
-    // Dynamic course room subscription
-    socket.on('join_course', ({ courseId }) => {
-      if (courseId) {
+    // Dynamic course room subscription — only for courses the account is
+    // actually entitled to.
+    socket.on('join_course', async ({ courseId } = {}, ack) => {
+      try {
+        if (!user || !courseId) {
+          if (typeof ack === 'function') ack({ ok: false });
+          return;
+        }
+        const allowed = await canListenToCourse(user, courseId);
+        if (!allowed) {
+          socketLog.warn('socket course room join blocked', { courseId });
+          if (typeof ack === 'function') ack({ ok: false });
+          return;
+        }
         socket.join(`course_${courseId}`);
+        if (typeof ack === 'function') ack({ ok: true });
+      } catch (e) {
+        socketLog.error('socket course join failed', { courseId, err: e });
+        if (typeof ack === 'function') ack({ ok: false, message: e.message });
       }
     });
 
-    socket.on('leave_course', ({ courseId }) => {
+    socket.on('leave_course', ({ courseId } = {}, ack) => {
       if (courseId) {
         socket.leave(`course_${courseId}`);
       }
+      if (typeof ack === 'function') ack({ ok: true });
     });
 
     socket.on('disconnect', () => {
@@ -134,6 +222,17 @@ const initSocket = (httpServer, isAllowedOrigin) => {
  * Access the active Socket.io instance
  */
 const getIO = () => io;
+
+/**
+ * Close the active Socket.io instance and allow a fresh one to be created.
+ * Used on shutdown and by the test suite.
+ */
+const closeSocket = () => {
+  if (io) {
+    io.close();
+    io = null;
+  }
+};
 
 /**
  * Broadcast event to all connected clients globally
@@ -242,4 +341,5 @@ module.exports = {
   emitToBranchRole,
   emitToCourse,
   emitNotification,
+  closeSocket,
 };
