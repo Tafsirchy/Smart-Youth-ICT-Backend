@@ -11,6 +11,12 @@ const JobPlacement = require("../models/JobPlacement");
 const ServicePageContent = require("../models/ServicePageContent");
 const WebServiceContent = require("../models/WebServiceContent");
 const SystemSetting = require("../models/SystemSetting");
+const { escapeRegex } = require("../utils/regex");
+const {
+  normalizeServiceContent,
+  parseServiceContent,
+  parseCareerServiceContent,
+} = require("../schemas/serviceContent.schema");
 
 /**
  * 🏢 Team Management (Core & Advisory)
@@ -161,9 +167,10 @@ exports.getMentors = async (req, res, next) => {
     const { search } = req.query;
     const filter = { role: "instructor" };
     if (search) {
+      const escaped = escapeRegex(String(search).trim());
       filter.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } }
+        { name: { $regex: escaped, $options: "i" } },
+        { email: { $regex: escaped, $options: "i" } }
       ];
     }
     const mentors = await User.find(filter).select("-password").sort("-createdAt");
@@ -261,21 +268,31 @@ exports.deleteTestimonial = async (req, res, next) => {
 // 1. Service Page Content (Hero/Methodology)
 exports.getServicePageContent = async (req, res, next) => {
   try {
+    res.set("Cache-Control", "public, max-age=300, s-maxage=600");
     const { pageType } = req.params;
     const content = await ServicePageContent.findOne({ pageType });
-    res.json({ success: true, data: content });
+    res.json({ success: true, data: normalizeServiceContent(content, { pageType }) });
   } catch (err) { next(err); }
 };
 
 exports.updateServicePageContent = async (req, res, next) => {
   try {
     const { pageType } = req.params;
+    const validation = parseCareerServiceContent(req.body, { pageType });
+    if (!validation.ok) {
+      return res.status(422).json({
+        success: false,
+        message: "The content does not match the service content schema",
+        issues: validation.issues,
+      });
+    }
+
     const content = await ServicePageContent.findOneAndUpdate(
-      { pageType }, 
-      req.body, 
+      { pageType },
+      req.body,
       { new: true, upsert: true, runValidators: true }
     );
-    res.json({ success: true, data: content });
+    res.json({ success: true, data: normalizeServiceContent(content, { pageType }) });
   } catch (err) { next(err); }
 };
 
@@ -397,21 +414,31 @@ exports.deleteJobPlacement = async (req, res, next) => {
 // 6. Web & Software Services (Portfolio/Business)
 exports.getWebServiceContent = async (req, res, next) => {
   try {
+    res.set("Cache-Control", "public, max-age=300, s-maxage=600");
     const { pageType } = req.params;
     const content = await WebServiceContent.findOne({ pageType });
-    res.json({ success: true, data: content });
+    res.json({ success: true, data: normalizeServiceContent(content, { pageType }) });
   } catch (err) { next(err); }
 };
 
 exports.updateWebServiceContent = async (req, res, next) => {
   try {
     const { pageType } = req.params;
+    const validation = parseServiceContent(req.body, { pageType });
+    if (!validation.ok) {
+      return res.status(422).json({
+        success: false,
+        message: "The content does not match the service content schema",
+        issues: validation.issues,
+      });
+    }
+
     const content = await WebServiceContent.findOneAndUpdate(
       { pageType },
       req.body,
       { new: true, upsert: true, runValidators: true }
     );
-    res.json({ success: true, data: content });
+    res.json({ success: true, data: normalizeServiceContent(content, { pageType }) });
   } catch (err) { next(err); }
 };
 
