@@ -9,18 +9,8 @@ exports.getBranchStats = async (req, res, next) => {
     const branchId = isSuper ? (req.query.branchId || req.params.branchId || req.user.branchId) : req.user.branchId;
     if (!branchId) return res.status(400).json({ success: false, message: 'Branch context missing' });
 
-    const stats = await User.aggregate([
-      { $match: { branchId: new mongoose.Types.ObjectId(branchId) } }, // Ensure ObjectId
-      { $facet: {
-          students: [{ $match: { role: 'student' } }, { $count: 'count' }],
-          courses:  [{ $lookup: { from: 'courses', pipeline: [{ $match: { branchId: new mongoose.Types.ObjectId(branchId) } }], as: 'c' } }, { $count: 'count' }], // This is inefficient, better separate
-          revenue:  [{ $lookup: { from: 'payments', pipeline: [{ $match: { branchId: new mongoose.Types.ObjectId(branchId), status: 'completed' } }], as: 'p' } }, { $unwind: '$p' }, { $group: { _id: null, total: { $sum: '$p.amount' } } }]
-      }}
-    ]);
-    
-    // Actually, simpler is often better for different collections. 
-    // Let's use Promise.all but ensure indexes are used.
-    
+    // The counts come from separate collections, so they are queried
+    // individually instead of through one large aggregation.
     const [studentCount, courseCount, paymentAgg] = await Promise.all([
         User.countDocuments({ branchId, role: 'student' }),
         Course.countDocuments({ branchId }),
@@ -53,6 +43,7 @@ const LeadCRM = require('../models/LeadCRM');
 // @access  Public
 exports.getPublicBranches = async (req, res, next) => {
   try {
+    res.set('Cache-Control', 'public, max-age=600, s-maxage=1800');
     const branches = await Branch.find({ isActive: true }).select('name code slug division').sort('name');
     res.json({ success: true, data: branches });
   } catch (err) { next(err); }
@@ -63,6 +54,7 @@ exports.getPublicBranches = async (req, res, next) => {
 // @access  Public
 exports.getPublicBranchesDetailed = async (req, res, next) => {
   try {
+    res.set('Cache-Control', 'public, max-age=600, s-maxage=1800');
     const branches = await Branch.find({ isActive: true })
       .select('name code slug type division address contact location officeHours facilities coverImage gallery logo website whatsapp notice isActive')
       .sort({ type: 1, name: 1 });
