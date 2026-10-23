@@ -1,30 +1,37 @@
 const Asset = require('../models/Asset');
-const Branch = require('../models/Branch');
-const mongoose = require('mongoose');
+const { resolveBranchScope, isBranchAuthorized } = require('../utils/branchHelper');
+const { escapeRegex } = require('../utils/regex');
 
-async function resolveBranchId(param) {
-  if (!param) return null;
-  if (mongoose.Types.ObjectId.isValid(param)) {
-    const doc = await Branch.findById(param).select('_id');
-    if (doc) return doc._id;
-  }
-  const bySlugOrCode = await Branch.findOne({
-    $or: [{ slug: param.toLowerCase() }, { code: param.toUpperCase() }]
-  }).select('_id');
-  return bySlugOrCode ? bySlugOrCode._id : null;
-}
+/**
+ * Fields a client may write. `branchId` is deliberately absent: moving an
+ * asset between branches is a tenant-boundary change and is not part of an
+ * ordinary update.
+ */
+const WRITABLE_ASSET_FIELDS = [
+  'name',
+  'category',
+  'quantity',
+  'unitPrice',
+  'status',
+  'purchasedAt',
+  'description',
+  'image',
+  'assignedTo',
+];
 
 exports.getAssets = async (req, res, next) => {
   try {
     const rawBranch = req.query.branchId || req.user.branchId;
-    const resolvedBranchId = await resolveBranchId(rawBranch);
+    const scope = await resolveBranchScope(req, rawBranch);
+
+    if (scope.denied) {
+      return res.status(403).json({ success: false, message: 'Access denied: You do not have permission for this branch.' });
+    }
 
     const filter = {};
-    if (req.user.role !== 'super_admin' && req.user.role !== 'super_management') {
-      if (!resolvedBranchId) return res.status(403).json({ success: false, message: 'Branch ID required' });
-      filter.branchId = resolvedBranchId;
-    } else if (resolvedBranchId) {
-      filter.branchId = resolvedBranchId;
+    if (!scope.isAll) {
+      if (!scope.branchId) return res.status(403).json({ success: false, message: 'Branch ID required' });
+      filter.branchId = scope.branchId;
     }
 
     if (req.query.status) {
@@ -35,9 +42,10 @@ exports.getAssets = async (req, res, next) => {
     }
     if (req.query.search) {
       const q = String(req.query.search).trim();
+      const escapedQ = escapeRegex(q);
       filter.$or = [
-        { name: { $regex: q, $options: 'i' } },
-        { description: { $regex: q, $options: 'i' } },
+        { name: { $regex: escapedQ, $options: 'i' } },
+        { description: { $regex: escapedQ, $options: 'i' } },
       ];
     }
 
@@ -81,10 +89,23 @@ exports.getAssets = async (req, res, next) => {
 exports.createAsset = async (req, res, next) => {
   try {
     const rawBranch = req.body.branchId || req.user.branchId;
-    const branchId = await resolveBranchId(rawBranch);
-    if (!branchId) return res.status(400).json({ success: false, message: 'Valid Branch ID missing' });
+    const scope = await resolveBranchScope(req, rawBranch);
 
-    const asset = await Asset.create({ ...req.body, branchId });
+    if (scope.denied) {
+      return res.status(403).json({ success: false, message: 'Access denied: You do not have permission for this branch.' });
+    }
+    if (!scope.branchId) {
+      return res.status(400).json({ success: false, message: 'Valid Branch ID missing' });
+    }
+
+    const payload = { ...req.body, branchId: scope.branchId };
+    for (const key of Object.keys(payload)) {
+      if (!WRITABLE_ASSET_FIELDS.includes(key) && key !== 'branchId') {
+        delete payload[key];
+      }
+    }
+
+    const asset = await Asset.create(payload);
     const populated = await Asset.findById(asset._id)
       .populate('assignedTo', 'name email avatar phone')
       .populate('branchId', 'name code');
@@ -100,13 +121,21 @@ exports.updateAsset = async (req, res, next) => {
     let asset = await Asset.findById(req.params.id);
     if (!asset) return res.status(404).json({ success: false, message: 'Asset not found' });
 
-    // Isolation
-    const isSuper = req.user.role === 'super_admin' || req.user.role === 'super_management';
-    if (!isSuper && asset.branchId.toString() !== req.user.branchId?.toString()) {
+    // Isolation — a user may only touch assets in a branch they belong to.
+    if (!isBranchAuthorized(req, asset.branchId)) {
       return res.status(403).json({ success: false, message: 'Unauthorized branch access' });
     }
 
-    asset = await Asset.findByIdAndUpdate(req.params.id, req.body, { new: true })
+    // `branchId` is not writable: it would move the asset across tenants.
+    const updates = { ...req.body };
+    delete updates.branchId;
+    for (const key of Object.keys(updates)) {
+      if (!WRITABLE_ASSET_FIELDS.includes(key)) {
+        delete updates[key];
+      }
+    }
+
+    asset = await Asset.findByIdAndUpdate(req.params.id, updates, { new: true })
       .populate('assignedTo', 'name email avatar phone')
       .populate('branchId', 'name code');
 
@@ -122,8 +151,7 @@ exports.deleteAsset = async (req, res, next) => {
     if (!asset) return res.status(404).json({ success: false, message: 'Asset not found' });
 
     // Isolation
-    const isSuper = req.user.role === 'super_admin' || req.user.role === 'super_management';
-    if (!isSuper && asset.branchId.toString() !== req.user.branchId?.toString()) {
+    if (!isBranchAuthorized(req, asset.branchId)) {
       return res.status(403).json({ success: false, message: 'Unauthorized branch access' });
     }
 
@@ -135,6 +163,7 @@ exports.deleteAsset = async (req, res, next) => {
 };
 
 const { uploadToImageBB } = require('../services/imagebb.service');
+const { validateImageUpload } = require('../utils/imageValidation');
 
 exports.uploadAssetImage = async (req, res, next) => {
   try {
@@ -143,13 +172,19 @@ exports.uploadAssetImage = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'No file provided' });
     }
 
+    // The declared type and the file name are client-controlled, so the type
+    // is established from the magic bytes instead.
+    const validation = validateImageUpload(file.buffer, file.mimetype);
+    if (!validation.ok) {
+      return res.status(validation.status).json({ success: false, message: validation.message });
+    }
+
     let url;
     try {
       url = await uploadToImageBB(file.buffer);
     } catch (imgbbErr) {
       console.warn('ImageBB upload failed or key invalid, falling back to base64 Data URL:', imgbbErr.message);
-      const mimeType = file.mimetype || 'image/png';
-      url = `data:${mimeType};base64,${file.buffer.toString('base64')}`;
+      url = `data:${validation.mime};base64,${file.buffer.toString('base64')}`;
     }
 
     res.json({
