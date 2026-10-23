@@ -1,22 +1,7 @@
 const ClassSchedule = require('../models/ClassSchedule');
-const Branch = require('../models/Branch');
-const User = require('../models/User');
-const Course = require('../models/Course');
 const Enrollment = require('../models/Enrollment');
-const mongoose = require('mongoose');
 const notificationService = require('../services/notification.service');
-
-async function resolveBranchId(param) {
-  if (!param) return null;
-  if (mongoose.Types.ObjectId.isValid(param)) {
-    const doc = await Branch.findById(param).select('_id');
-    if (doc) return doc._id;
-  }
-  const bySlugOrCode = await Branch.findOne({
-    $or: [{ slug: param.toLowerCase() }, { code: param.toUpperCase() }]
-  }).select('_id');
-  return bySlugOrCode ? bySlugOrCode._id : null;
-}
+const { resolveBranchScope, isBranchAuthorized } = require('../utils/branchHelper');
 
 function timeToMinutes(str) {
   if (!str) return 0;
@@ -40,6 +25,16 @@ function checkTimeOverlap(startA, endA, startB, endB) {
   const bS = timeToMinutes(startB);
   const bE = timeToMinutes(endB);
   return aS < bE && aE > bS;
+}
+
+function sanitizeSchedule(s) {
+  const obj = s.toObject ? s.toObject() : { ...s };
+  if (obj.course && typeof obj.course === 'object' && obj.course.title) {
+    if (typeof obj.course.title === 'object') {
+      obj.course.title = obj.course.title.en || obj.course.title.bn || Object.values(obj.course.title)[0] || '';
+    }
+  }
+  return obj;
 }
 
 // ─── Conflict Detector Helper ─────────────────────────────────────────
@@ -97,16 +92,17 @@ async function checkScheduleConflicts({ branchId, trainerId, roomOrLab, dayOfWee
 exports.getSchedules = async (req, res, next) => {
   try {
     const rawBranch = req.query.branchId || req.user.branchId;
-    const resolvedBranchId = await resolveBranchId(rawBranch);
+    const scope = await resolveBranchScope(req, rawBranch);
+
+    if (scope.denied) {
+      return res.status(403).json({ success: false, message: 'Access denied: You do not have permission for this branch.' });
+    }
 
     const filter = { isActive: true };
-    const isSuper = req.user.role === 'super_admin' || req.user.role === 'super_management';
 
-    if (!isSuper) {
-      if (!resolvedBranchId) return res.status(403).json({ success: false, message: 'Branch ID required' });
-      filter.branchId = resolvedBranchId;
-    } else if (resolvedBranchId) {
-      filter.branchId = resolvedBranchId;
+    if (!scope.isAll) {
+      if (!scope.branchId) return res.status(403).json({ success: false, message: 'Branch ID required' });
+      filter.branchId = scope.branchId;
     }
 
     if (req.query.dayOfWeek && req.query.dayOfWeek !== 'all') {
@@ -134,13 +130,16 @@ exports.getSchedules = async (req, res, next) => {
       .sort('dayOfWeek startTime');
 
     // Aggregate unique room list and statistics for matrix UI
-    const distinctRooms = await ClassSchedule.distinct('roomOrLab', resolvedBranchId ? { branchId: resolvedBranchId } : {});
+    const distinctRooms = await ClassSchedule.distinct(
+      'roomOrLab',
+      scope.isAll ? {} : { branchId: scope.branchId }
+    );
 
     res.json({
       success: true,
       count: schedules.length,
       rooms: distinctRooms,
-      data: schedules
+      data: schedules.map(sanitizeSchedule)
     });
   } catch (err) {
     next(err);
@@ -159,7 +158,7 @@ exports.getMyRoutine = async (req, res, next) => {
         .populate('branchId', 'name code address')
         .sort('dayOfWeek startTime');
 
-      return res.json({ success: true, count: schedules.length, data: schedules });
+      return res.json({ success: true, count: schedules.length, data: schedules.map(sanitizeSchedule) });
     }
 
     // Otherwise, student: find courses student is enrolled in
@@ -185,7 +184,7 @@ exports.getMyRoutine = async (req, res, next) => {
       .populate('branchId', 'name code address')
       .sort('dayOfWeek startTime');
 
-    res.json({ success: true, count: schedules.length, data: schedules });
+    res.json({ success: true, count: schedules.length, data: schedules.map(sanitizeSchedule) });
   } catch (err) {
     next(err);
   }
@@ -194,8 +193,16 @@ exports.getMyRoutine = async (req, res, next) => {
 exports.createSchedule = async (req, res, next) => {
   try {
     const rawBranch = req.body.branchId || req.user.branchId;
-    const branchId = await resolveBranchId(rawBranch);
-    if (!branchId) return res.status(400).json({ success: false, message: 'Valid Branch ID required' });
+    const scope = await resolveBranchScope(req, rawBranch);
+
+    if (scope.denied) {
+      return res.status(403).json({ success: false, message: 'Access denied: You do not have permission for this branch.' });
+    }
+    if (!scope.branchId) {
+      return res.status(400).json({ success: false, message: 'Valid Branch ID required' });
+    }
+
+    const branchId = scope.branchId;
 
     const { batchName, course, trainer, dayOfWeek, startTime, endTime, roomOrLab, meetingLink, notes } = req.body;
 
@@ -303,21 +310,27 @@ exports.updateSchedule = async (req, res, next) => {
     let schedule = await ClassSchedule.findById(req.params.id);
     if (!schedule) return res.status(404).json({ success: false, message: 'Class schedule not found' });
 
-    const isSuper = req.user.role === 'super_admin' || req.user.role === 'super_management';
-    if (!isSuper && schedule.branchId.toString() !== req.user.branchId?.toString()) {
+    // Isolation — a user may only touch schedules in a branch they belong to.
+    if (!isBranchAuthorized(req, schedule.branchId)) {
       return res.status(403).json({ success: false, message: 'Unauthorized branch access' });
     }
 
+    // A schedule stays in its branch. Re-pointing it at another branch would
+    // move it across tenants, so the requested branch is only accepted when
+    // it resolves to the branch the schedule already belongs to.
     let branchId = schedule.branchId;
     if (req.body.branchId) {
-      const requestedBranchId = await resolveBranchId(req.body.branchId);
-      if (!requestedBranchId) {
-        return res.status(400).json({ success: false, message: 'Valid Branch ID required' });
-      }
-      if (!isSuper && requestedBranchId.toString() !== schedule.branchId.toString()) {
+      const scope = await resolveBranchScope(req, req.body.branchId);
+      if (scope.denied || !scope.branchId) {
         return res.status(403).json({ success: false, message: 'Unauthorized branch access' });
       }
-      branchId = requestedBranchId;
+      if (scope.branchId.toString() !== schedule.branchId.toString()) {
+        return res.status(400).json({
+          success: false,
+          message: 'A class schedule cannot be moved to a different branch.',
+        });
+      }
+      branchId = scope.branchId;
     }
 
     const trainerId = req.body.trainer ?? schedule.trainer;
@@ -407,8 +420,8 @@ exports.deleteSchedule = async (req, res, next) => {
     const schedule = await ClassSchedule.findById(req.params.id);
     if (!schedule) return res.status(404).json({ success: false, message: 'Class schedule not found' });
 
-    const isSuper = req.user.role === 'super_admin' || req.user.role === 'super_management';
-    if (!isSuper && schedule.branchId.toString() !== req.user.branchId?.toString()) {
+    // Isolation
+    if (!isBranchAuthorized(req, schedule.branchId)) {
       return res.status(403).json({ success: false, message: 'Unauthorized branch access' });
     }
 
