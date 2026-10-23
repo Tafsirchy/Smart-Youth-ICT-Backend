@@ -3,10 +3,7 @@ const Notification = require('../models/Notification');
 const Enrollment = require('../models/Enrollment');
 const Course = require('../models/Course');
 const {
-  notifyUser,
   notifyBranch,
-  notifyBranchAdmins,
-  notifyCourse,
   notifyGlobal,
 } = require('../services/notification.service');
 
