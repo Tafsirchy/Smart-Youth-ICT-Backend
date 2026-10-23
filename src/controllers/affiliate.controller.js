@@ -1,9 +1,5 @@
 const crypto = require("crypto");
 const Affiliate = require("../models/Affiliate");
-const Enrollment = require("../models/Enrollment");
-const Course = require("../models/Course");
-
-const COMMISSION_RATE = 0.1; // 10%
 
 // Helper to generate a unique referral code
 const genCode = (userId) =>
