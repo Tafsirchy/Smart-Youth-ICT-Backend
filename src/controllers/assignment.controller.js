@@ -46,7 +46,7 @@ exports.submitAssignment = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'You have already submitted this assignment' });
     }
 
-    // 🛡️ Security Fix: Sanitize input to prevent Stored XSS
+    // ðŸ›¡ï¸ Security Fix: Sanitize input to prevent Stored XSS
     const cleanFileUrl = String(fileUrl || "").trim();
     if (cleanFileUrl.toLowerCase().startsWith('javascript:')) {
       return res.status(400).json({ success: false, message: 'Invalid file URL provided' });
@@ -60,7 +60,7 @@ exports.submitAssignment = async (req, res, next) => {
       notes: typeof notes === 'string' ? require('sanitize-html')(notes) : notes,
     });
 
-    // 🔔 Real-time Notification to Instructor
+    // ðŸ”” Real-time Notification to Instructor
     try {
       if (assignment.course?.instructor) {
         notificationService.notifyUser(assignment.course.instructor, {
@@ -94,7 +94,7 @@ exports.submitAssignment = async (req, res, next) => {
 // @access  Private (Admin/Instructor)
 exports.createAssignment = async (req, res, next) => {
   try {
-    // 🛡️ Security Fix: Explicit allow-list for Mass Assignment protection
+    // ðŸ›¡ï¸ Security Fix: Explicit allow-list for Mass Assignment protection
     const { course: courseId, title, lessonTitle, description, dueDate, points, status } = req.body;
     
     // Authorization: Ensure instructor owns the course
@@ -120,7 +120,7 @@ exports.createAssignment = async (req, res, next) => {
       status: status || 'active'
     });
 
-    // 🔔 Real-time Notification to Enrolled Students
+    // ðŸ”” Real-time Notification to Enrolled Students
     try {
       const formattedDueDate = dueDate ? new Date(dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'Soon';
       notificationService.notifyCourse(courseId, {
@@ -139,7 +139,7 @@ exports.createAssignment = async (req, res, next) => {
         }
       }).catch(err => console.error('[Notification notifyCourse failed]', err.message));
 
-      // 🔔 Branch Admin Notification
+      // ðŸ”” Branch Admin Notification
       if (course.branchId) {
         notificationService.notifyBranchAdmins(course.branchId, {
           title: 'Course Assignment Created',
@@ -172,7 +172,7 @@ exports.gradeSubmission = async (req, res, next) => {
     
     if (!submission) return res.status(404).json({ success: false, message: 'Submission not found' });
 
-    // 🛡️ Security Fix: Authorization Check
+    // ðŸ›¡ï¸ Security Fix: Authorization Check
     // Ensure instructor owns the course associated with this assignment
     const assignment = await Assignment.findById(submission.assignment).populate('course');
     if (req.user.role === 'instructor' && assignment?.course?.instructor?.toString() !== req.user._id.toString()) {
@@ -184,7 +184,7 @@ exports.gradeSubmission = async (req, res, next) => {
     submission.status = 'graded';
     await submission.save();
 
-    // 🔔 Real-time Notification to Student
+    // ðŸ”” Real-time Notification to Student
     try {
       notificationService.notifyUser(submission.student, {
         title: 'Assignment Graded',
@@ -199,19 +199,27 @@ exports.gradeSubmission = async (req, res, next) => {
           courseId: assignment?.course?._id || assignment?.course,
           actorName: req.user.name
         }
-      }).catch(err => console.error('[Notification gradeSubmission failed]', err.message));
+      }).catch(err => req.log?.error('grade submission notification failed', { assignmentId: assignment._id, err }));
     } catch (nErr) {
-      console.error('[Notification gradeSubmission err]', nErr.message);
+      req.log?.error('grade submission notification error', { assignmentId: assignment._id, err: nErr });
     }
 
-    // 📧 Notify Student via Email
+    // ðŸ“§ Notify Student via Email
     try {
       const student = await User.findById(submission.student);
       if (student) {
         emailService.sendAssignmentFeedback(student, assignment, grade)
-          .catch(e => console.error('[Assignment Email Failed]', e.message));
+          .catch(e => req.log?.error('assignment feedback email failed', { assignmentId: assignment._id, err: e }));
       }
-    } catch(e) {}
+    } catch(e) {
+      // The grade is already stored; a failed lookup only means the student
+      // did not get the feedback email.
+      req.log?.error('assignment feedback email lookup failed', {
+        assignmentId: assignment._id,
+        studentId: submission.student,
+        err: e,
+      });
+    }
 
     res.json({ success: true, data: submission });
   } catch (err) {
