@@ -11,6 +11,7 @@ const PERMISSIONS = {
   // Payments & Financials
   PAYMENTS_VIEW: 'payments:view',
   PAYMENTS_VERIFY: 'payments:verify',
+  PAYMENTS_OVERRIDE_AMOUNT: 'payments:override-amount',
   INVOICES_VIEW: 'invoices:view',
   INVOICES_MANAGE: 'invoices:manage',
 
@@ -33,6 +34,18 @@ const PERMISSIONS = {
 
   // Staff Management (Branch Admin only)
   STAFF_MANAGE: 'staff:manage',
+
+  // Assets & Inventory
+  ASSETS_VIEW: 'assets:view',
+  ASSETS_MANAGE: 'assets:manage',
+
+  // Expenses
+  EXPENSES_VIEW: 'expenses:view',
+  EXPENSES_MANAGE: 'expenses:manage',
+
+  // Class Schedules & Routines
+  SCHEDULES_VIEW: 'schedules:view',
+  SCHEDULES_MANAGE: 'schedules:manage',
 };
 
 const PERMISSION_METADATA = [
@@ -49,6 +62,7 @@ const PERMISSION_METADATA = [
     permissions: [
       { id: PERMISSIONS.PAYMENTS_VIEW, name: 'View Payments', description: 'View student fee transactions and history' },
       { id: PERMISSIONS.PAYMENTS_VERIFY, name: 'Verify Payments', description: 'Approve or reject manual/bank payment receipts' },
+      { id: PERMISSIONS.PAYMENTS_OVERRIDE_AMOUNT, name: 'Override Payment Amount', description: 'Approve a manual payment whose declared amount differs from the course price' },
       { id: PERMISSIONS.INVOICES_VIEW, name: 'View Invoices', description: 'View student invoices and billing records' },
       { id: PERMISSIONS.INVOICES_MANAGE, name: 'Manage Invoices', description: 'Issue or update student fee invoices' },
     ],
@@ -80,6 +94,27 @@ const PERMISSION_METADATA = [
     permissions: [
       { id: PERMISSIONS.SEMINARS_VIEW, name: 'View Registrations', description: 'View seminar participant signups' },
       { id: PERMISSIONS.SEMINARS_MANAGE, name: 'Manage Attendance', description: 'Mark seminar attendance and contact leads' },
+    ],
+  },
+  {
+    category: 'Assets & Inventory',
+    permissions: [
+      { id: PERMISSIONS.ASSETS_VIEW, name: 'View Assets', description: 'View branch inventory and asset valuations' },
+      { id: PERMISSIONS.ASSETS_MANAGE, name: 'Manage Assets', description: 'Create, update and retire branch assets' },
+    ],
+  },
+  {
+    category: 'Expenses',
+    permissions: [
+      { id: PERMISSIONS.EXPENSES_VIEW, name: 'View Expenses', description: 'View branch expense ledger and analytics' },
+      { id: PERMISSIONS.EXPENSES_MANAGE, name: 'Manage Expenses', description: 'Submit and edit branch expenses' },
+    ],
+  },
+  {
+    category: 'Schedules & Routines',
+    permissions: [
+      { id: PERMISSIONS.SCHEDULES_VIEW, name: 'View Schedules', description: 'View branch class schedules and routines' },
+      { id: PERMISSIONS.SCHEDULES_MANAGE, name: 'Manage Schedules', description: 'Create and update branch class schedules' },
     ],
   },
 ];

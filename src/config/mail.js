@@ -11,12 +11,16 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-transporter.verify((err) => {
-  if (err) {
-    console.warn('⚠️  Mail transport not ready. Please check SMTP configuration in .env', err.message);
-  } else {
-    console.log('✉️  SMTP Server Ready');
-  }
-});
+const isTest = process.env.NODE_ENV === 'test';
+
+if (!isTest) {
+  transporter.verify((err) => {
+    if (err) {
+      console.warn('⚠️  Mail transport not ready. Please check SMTP configuration in .env', err.message);
+    } else {
+      console.log('✉️  SMTP Server Ready');
+    }
+  });
+}
 
 module.exports = transporter;

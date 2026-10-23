@@ -45,7 +45,7 @@ const compilePatterns = (raw) => {
       // origin. `https://app.vercel.app` can therefore not be matched by a
       // pattern that was written for a different host.
       patterns.push(new RegExp(`^(?:${source})$`));
-    } catch (err) {
+    } catch {
       // A broken pattern must never take the API down.
       console.error(`[CORS] Ignoring invalid ALLOWED_ORIGIN_PATTERNS entry: ${source}`);
     }
