@@ -1,4 +1,4 @@
-const cron    = require('node-cron');
+const cron = require('node-cron');
 const Progress = require('../models/Progress');
 const Certificate = require('../models/Certificate');
 const certificateService = require('../services/certificate.service');
@@ -13,7 +13,7 @@ cron.schedule('0 * * * *', async () => {
     }).populate('user').populate('course');
 
     for (const progress of completed) {
-      const exists = await Certificate.findOne({ user: progress.user._id, course: progress.course._id });
+      const exists = await Certificate.findOne({ student: progress.user._id, course: progress.course._id });
       if (!exists) {
         await certificateService.generate(progress.user, progress.course);
         console.log(`[JOB] Certificate issued: ${progress.user.email} – ${progress.course.title?.en}`);
