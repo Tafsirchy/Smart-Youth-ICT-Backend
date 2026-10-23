@@ -7,6 +7,7 @@ const PaymentSchema = new mongoose.Schema(
     branchId:      { type: mongoose.Schema.Types.ObjectId, ref: 'Branch',  index: true },
     method:        { type: String, enum: ['bkash','nagad','rocket','stripe','card','bank','cash','sslcommerz'], required: true },
     amount:        { type: Number, required: true },
+    declaredAmount:{ type: Number },  // amount the payer declared on a manual submission (audit trail)
     gatewayFee:    { type: Number, default: 0 },
     netAmount:      { type: Number, default: 0 },
     currency:      { type: String, default: 'BDT' },
@@ -28,6 +29,9 @@ const PaymentSchema = new mongoose.Schema(
     webhookReplayedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     verifiedBy:    { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     verifiedAt:    Date,
+    amountOverridden:   { type: Boolean, default: false },
+    amountOverriddenBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    amountOverriddenAt: Date,
   },
   { timestamps: true },
 );
