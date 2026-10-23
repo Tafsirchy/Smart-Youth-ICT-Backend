@@ -48,7 +48,10 @@ const apiLimiter = rateLimit({
   validate,
   // Health checks and payment/requisition webhooks are called by machines
   // that share an egress IP and retry on failure, so they are not throttled.
+  // The test suite drives hundreds of requests from one address, so the
+  // limiter is disabled there rather than being worked around per test.
   skip: (req) =>
+    process.env.NODE_ENV === 'test' ||
     req.path === '/health' ||
     req.path.startsWith('/api/payments/webhook') ||
     req.path.startsWith('/api/requisitions/webhook'),

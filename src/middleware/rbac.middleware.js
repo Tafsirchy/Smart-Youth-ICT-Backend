@@ -1,4 +1,6 @@
-const { getAllowedBranches } = require("../utils/branchHelper");
+const { getAllowedBranches, isBranchAuthorized } = require("../utils/branchHelper");
+
+const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
 
 /**
  * Require Access Middleware
@@ -22,11 +24,20 @@ const requireAccess = (...requiredPermissions) => {
       return next();
     }
 
-    // 2. Resolve target branch if provided in request
+    // 2. Resolve target branch if provided in request.
+    //
+    // Only an ObjectId can be checked here without a database round trip. A
+    // slug or code is left to the controller, which resolves it through
+    // `resolveBranchScope` — that resolver is the authoritative check and
+    // rejects branches the user cannot access.
     const targetBranch = req.params?.branchId || req.body?.branchId || req.query?.branchId;
     const allowedBranches = getAllowedBranches(req.user);
 
-    if (targetBranch && !allowedBranches.includes(targetBranch.toString())) {
+    if (
+      targetBranch &&
+      OBJECT_ID_REGEX.test(String(targetBranch)) &&
+      !allowedBranches.includes(String(targetBranch))
+    ) {
       return res.status(403).json({
         success: false,
         message: "Access denied: You do not have permission for this branch."
@@ -68,19 +79,17 @@ const requireAccess = (...requiredPermissions) => {
 };
 
 /**
- * Controller-level helper to verify that a fetched document's branch matches the user's branch
+ * Controller-level helper to verify that a fetched document's branch matches
+ * the user's branch.
+ *
+ * The implementation now lives in `src/utils/branchHelper.js` so that every
+ * branch-scope check in the codebase shares one implementation. It is
+ * re-exported here because that is where callers already import it from.
+ *
  * @param {Object} req - Express request object
  * @param {string|ObjectId} docBranchId - The branchId of the document being accessed
  * @returns {boolean} - true if authorized, false otherwise
  */
-const isBranchAuthorized = (req, docBranchId) => {
-  if (!req.user) return false;
-  if (req.user.role === "super_admin" || req.user.role === "super_management") return true;
-  if (!docBranchId) return false;
-
-  const allowedBranches = getAllowedBranches(req.user);
-  return allowedBranches.includes(docBranchId.toString());
-};
 
 module.exports = {
   requireAccess,
