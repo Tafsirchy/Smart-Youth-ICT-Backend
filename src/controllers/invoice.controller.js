@@ -1,5 +1,4 @@
 const Invoice = require('../models/Invoice');
-const Branch = require('../models/Branch');
 const { isBranchAuthorized } = require('../middleware/rbac.middleware');
 
 // @desc    Get all invoices (branch-aware)
