@@ -3,15 +3,22 @@
   "version": "1.0.0",
   "description": "Smart Youth ICT — REST API (Node.js + Express + MongoDB)",
   "main": "src/server.js",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
+    "test": "node scripts/jest-runner.js --runInBand",
+    "test:watch": "node scripts/jest-runner.js --watch",
+    "test:coverage": "node scripts/jest-runner.js --runInBand --coverage",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "migrate:geo": "node -e \"require('dotenv').config();const m=require('mongoose');m.connect(process.env.MONGO_URI,{family:4}).then(async()=>{const r=await require('./src/utils/geospatial-migration')();console.log(r);await m.disconnect();process.exit(r.error?1:0);}).catch(e=>{console.error(e);process.exit(1);})\""
   },
   "dependencies": {
     "axios": "^1.13.6",
     "bcryptjs": "^2.4.3",
-    "braces": "^3.0.3",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -24,25 +31,34 @@
     "helmet": "^7.1.0",
     "joi": "^17.12.3",
     "jsonwebtoken": "^9.0.2",
-    "micromatch": "^4.0.8",
     "mongoose": "^8.10.2",
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
     "node-cache": "^5.1.2",
-    "node-cron": "^3.0.3",
-    "nodemailer": "^8.0.5",
+    "node-cron": "^4.6.0",
+    "nodemailer": "^10.2.0",
     "picomatch": "^4.0.4",
-    "puppeteer": "^24.39.0",
     "resend": "^6.10.0",
-    "sanitize-html": "^2.17.2",
+    "sanitize-html": "^2.18.1",
     "slugify": "^1.6.6",
     "socket.io": "^4.8.4",
-    "stripe": "^20.4.1"
+    "stripe": "^20.4.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "nodemon": "^3.1.0"
+    "eslint": "^9.39.5",
+    "eslint-plugin-security": "^3.0.1",
+    "jest": "^30.5.2",
+    "mongodb-memory-server": "^11.3.0",
+    "nodemon": "^3.1.0",
+    "puppeteer": "^25.15.0",
+    "socket.io-client": "^4.8.4",
+    "supertest": "^7.3.1"
   },
   "overrides": {
-    "proxy-addr": "^2.0.8"
+    "proxy-addr": "^2.0.8",
+    "qs": "^6.16.1",
+    "uuid": "^11.1.1",
+    "htmlparser2": "^9.1.0"
   }
 }
