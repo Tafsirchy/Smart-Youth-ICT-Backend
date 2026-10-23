@@ -1,6 +1,5 @@
 const Lesson = require('../models/Lesson');
 const Course = require('../models/Course');
-const { uploadToImageBB } = require('../services/imagebb.service');
 
 // @desc    Get all lessons for a course
 // @route   GET /api/lessons?courseId=:id
