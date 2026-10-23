@@ -115,6 +115,27 @@ const googleAuthValidation = [
     .withMessage("Please provide a valid phone number"),
 ];
 
+const updatePasswordValidation = [
+  body("oldPassword")
+    .isString()
+    .withMessage("Current password is required")
+    .trim()
+    .notEmpty()
+    .withMessage("Current password is required"),
+  body("newPassword")
+    .isString()
+    .withMessage("New password is required")
+    .trim()
+    .isLength({ min: 8 })
+    .withMessage("New password must be at least 8 characters long")
+    .matches(/[a-z]/)
+    .withMessage("New password must include at least one lowercase letter")
+    .matches(/[A-Z]/)
+    .withMessage("New password must include at least one uppercase letter")
+    .matches(/[0-9]/)
+    .withMessage("New password must include at least one number"),
+];
+
 const handleValidation = (req, res, next) => {
   const errors = validationResult(req);
   if (errors.isEmpty()) return next();
@@ -135,5 +156,6 @@ module.exports = {
   resetPasswordValidation,
   acceptInviteValidation,
   googleAuthValidation,
+  updatePasswordValidation,
   handleValidation,
 };
