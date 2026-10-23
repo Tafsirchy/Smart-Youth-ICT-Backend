@@ -1,5 +1,4 @@
 const Coupon = require('../models/Coupon');
-const Branch = require('../models/Branch');
 const { resolveBranchId } = require('../utils/branchHelper');
 const { validateCouponForAmount } = require('../services/coupon.service');
 
