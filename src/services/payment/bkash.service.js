@@ -18,7 +18,8 @@ class BkashService {
           'Content-Type': 'application/json',
           'username': USERNAME,
           'password': PASSWORD
-        }
+        },
+        timeout: 15000
       });
       return data.id_token;
     } catch (error) {
@@ -43,14 +44,21 @@ class BkashService {
           'Content-Type': 'application/json',
           'Authorization': token,
           'X-APP-Key': APP_KEY
-        }
+        },
+        timeout: 15000
       });
-      
+
+      if (!data?.bkashURL) {
+        throw new Error('bKash did not return a payment URL');
+      }
+
       return data;
     } catch (error) {
-       console.error('bKash Create Payment Error:', error.response?.data || error.message);
-       // Returns mock data for local testing since genuine keys are likely missing
-       return { paymentID: `mock_${Date.now()}`, bkashURL: `https://dummy.bkash.com/pay/${Date.now()}` }; 
+      console.error('bKash Create Payment Error:', error.response?.data || error.message);
+      // No dummy URL: a customer must never be sent to a payment page that
+      // does not exist, and a payment that was not created must not look
+      // like a started payment.
+      throw new Error('Failed to start the bKash payment');
     }
   }
 
@@ -64,13 +72,14 @@ class BkashService {
           'Content-Type': 'application/json',
           'Authorization': token,
           'X-APP-Key': APP_KEY
-        }
+        },
+        timeout: 15000
       });
       return data;
     } catch (error) {
-       console.error('bKash Execute Payment Error:', error.response?.data || error.message);
-       // Mock execution success for testing
-       return { statusCode: '0000', trxID: `TRX${Date.now()}` };
+      console.error('bKash Execute Payment Error:', error.response?.data || error.message);
+      // A failed verification must never be reported as a successful payment.
+      throw new Error('Failed to verify the bKash payment');
     }
   }
 }
