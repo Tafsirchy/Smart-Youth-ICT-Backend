@@ -1,5 +1,6 @@
-// eslint-disable-next-line no-unused-vars
-const errorMiddleware = (err, req, res, next) => {
+const { logger } = require('../utils/logger');
+
+const errorMiddleware = (err, req, res, _next) => {
   let status = err.statusCode || err.status || 500;
   let message = err.message || 'Internal Server Error';
 
@@ -12,6 +13,11 @@ const errorMiddleware = (err, req, res, next) => {
   if (err.type === 'entity.too.large' || err.status === 413) {
     status = 413;
     message = 'Request payload too large. Please upload smaller or compressed images.';
+  } else if (err.code === 'LIMIT_FILE_SIZE') {
+    // Multer rejects an oversized upload without an HTTP status, which would
+    // otherwise surface as a 500.
+    status = 413;
+    message = 'File is too large. The maximum size is 5MB.';
   } else if (err.name === 'ValidationError' && err.errors) {
     status = 400;
     const details = Object.values(err.errors)
@@ -29,7 +35,12 @@ const errorMiddleware = (err, req, res, next) => {
   }
 
   if (status >= 500) {
-    console.error(`[${status}] ${req.method} ${req.originalUrl} →`, err);
+    (req.log || logger).error('request failed', {
+      status,
+      method: req.method,
+      path: req.originalUrl,
+      err,
+    });
     // A 5xx message is an internal failure description. It can carry a database
     // host, a file path, a payment provider payload or a stack fragment, none
     // of which belongs in a response body. Keep the detail in the log and
@@ -38,7 +49,12 @@ const errorMiddleware = (err, req, res, next) => {
       message = 'Internal Server Error';
     }
   } else if (process.env.NODE_ENV === 'development') {
-    console.warn(`[${status}] ${req.method} ${req.originalUrl} →`, message);
+    (req.log || logger).warn('request rejected', {
+      status,
+      method: req.method,
+      path: req.originalUrl,
+      message,
+    });
   }
 
   res.status(status).json({
