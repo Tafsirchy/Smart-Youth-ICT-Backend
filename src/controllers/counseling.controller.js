@@ -1,19 +1,29 @@
 const CounselingSession = require('../models/CounselingSession');
-const Branch = require('../models/Branch');
-const Course = require('../models/Course');
-const mongoose = require('mongoose');
+const {
+  isBranchAuthorized,
+  resolveBranchScope,
+  resolveBranchReference,
+} = require('../utils/branchHelper');
+const { escapeRegex } = require('../utils/regex');
 
-async function resolveBranchId(param) {
-  if (!param) return null;
-  if (mongoose.Types.ObjectId.isValid(param)) {
-    const doc = await Branch.findById(param).select('_id');
-    if (doc) return doc._id;
-  }
-  const bySlugOrCode = await Branch.findOne({
-    $or: [{ slug: param.toLowerCase() }, { code: param.toUpperCase() }]
-  }).select('_id');
-  return bySlugOrCode ? bySlugOrCode._id : null;
-}
+// Fields a branch admin may change on a counseling session. Everything else —
+// most importantly `branchId` — is server owned and must never come from the
+// request body.
+const UPDATABLE_SESSION_FIELDS = [
+  'status',
+  'preferredDate',
+  'preferredSlot',
+  'mode',
+  'interestedCourse',
+  'assignedTo',
+  'followUpDate',
+];
+
+const pickUpdatableFields = (body = {}) =>
+  UPDATABLE_SESSION_FIELDS.reduce((acc, field) => {
+    if (body[field] !== undefined) acc[field] = body[field];
+    return acc;
+  }, {});
 
 // ─── Public Booking ──────────────────────────────────────────────────
 exports.bookCounseling = async (req, res, next) => {
@@ -24,7 +34,7 @@ exports.bookCounseling = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Full name, phone, preferred date, and slot are required' });
     }
 
-    const branchId = await resolveBranchId(rawBranch);
+    const branchId = await resolveBranchReference(rawBranch);
     if (!branchId) {
       return res.status(400).json({ success: false, message: 'Invalid or missing Branch' });
     }
@@ -60,16 +70,19 @@ exports.bookCounseling = async (req, res, next) => {
 exports.getCounselingSessions = async (req, res, next) => {
   try {
     const rawBranch = req.query.branchId || req.user.branchId;
-    const resolvedBranchId = await resolveBranchId(rawBranch);
+    const scope = await resolveBranchScope(req, rawBranch);
+
+    if (scope.denied) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied: You do not have permission for this branch.',
+      });
+    }
 
     const filter = {};
-    const isSuper = req.user.role === 'super_admin' || req.user.role === 'super_management';
 
-    if (!isSuper) {
-      if (!resolvedBranchId) return res.status(403).json({ success: false, message: 'Branch ID required' });
-      filter.branchId = resolvedBranchId;
-    } else if (resolvedBranchId) {
-      filter.branchId = resolvedBranchId;
+    if (scope.branchId) {
+      filter.branchId = scope.branchId;
     }
 
     if (req.query.status && req.query.status !== 'all') {
@@ -80,10 +93,11 @@ exports.getCounselingSessions = async (req, res, next) => {
     }
     if (req.query.search) {
       const q = String(req.query.search).trim();
+      const escapedQ = escapeRegex(q);
       filter.$or = [
-        { fullName: { $regex: q, $options: 'i' } },
-        { phone: { $regex: q, $options: 'i' } },
-        { email: { $regex: q, $options: 'i' } }
+        { fullName: { $regex: escapedQ, $options: 'i' } },
+        { phone: { $regex: escapedQ, $options: 'i' } },
+        { email: { $regex: escapedQ, $options: 'i' } }
       ];
     }
 
@@ -95,7 +109,7 @@ exports.getCounselingSessions = async (req, res, next) => {
       .sort('-preferredDate -createdAt');
 
     // Pipeline Analytics
-    const statsFilter = resolvedBranchId ? { branchId: resolvedBranchId } : {};
+    const statsFilter = scope.branchId ? { branchId: scope.branchId } : {};
     const allSessions = await CounselingSession.find(statsFilter);
 
     const counts = {
@@ -130,15 +144,19 @@ exports.getCounselingSessions = async (req, res, next) => {
 
 exports.updateCounselingSession = async (req, res, next) => {
   try {
-    let session = await CounselingSession.findById(req.params.id);
+    const session = await CounselingSession.findById(req.params.id);
     if (!session) return res.status(404).json({ success: false, message: 'Session not found' });
 
-    const isSuper = req.user.role === 'super_admin' || req.user.role === 'super_management';
-    if (!isSuper && session.branchId.toString() !== req.user.branchId?.toString()) {
+    if (!isBranchAuthorized(req, session.branchId)) {
       return res.status(403).json({ success: false, message: 'Unauthorized branch access' });
     }
 
-    const updated = await CounselingSession.findByIdAndUpdate(req.params.id, req.body, { new: true })
+    const updates = pickUpdatableFields(req.body);
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ success: false, message: 'No updatable fields provided' });
+    }
+
+    const updated = await CounselingSession.findByIdAndUpdate(req.params.id, updates, { new: true })
       .populate('branchId', 'name code slug')
       .populate('interestedCourse', 'title price thumbnail')
       .populate('assignedTo', 'name email avatar phone')
@@ -158,8 +176,7 @@ exports.addCounselingNote = async (req, res, next) => {
     let session = await CounselingSession.findById(req.params.id);
     if (!session) return res.status(404).json({ success: false, message: 'Session not found' });
 
-    const isSuper = req.user.role === 'super_admin' || req.user.role === 'super_management';
-    if (!isSuper && session.branchId.toString() !== req.user.branchId?.toString()) {
+    if (!isBranchAuthorized(req, session.branchId)) {
       return res.status(403).json({ success: false, message: 'Unauthorized branch access' });
     }
 
@@ -188,8 +205,7 @@ exports.deleteCounselingSession = async (req, res, next) => {
     const session = await CounselingSession.findById(req.params.id);
     if (!session) return res.status(404).json({ success: false, message: 'Session not found' });
 
-    const isSuper = req.user.role === 'super_admin' || req.user.role === 'super_management';
-    if (!isSuper && session.branchId.toString() !== req.user.branchId?.toString()) {
+    if (!isBranchAuthorized(req, session.branchId)) {
       return res.status(403).json({ success: false, message: 'Unauthorized branch access' });
     }
 
