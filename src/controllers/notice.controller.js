@@ -1,6 +1,5 @@
 const BranchNotice = require('../models/BranchNotice');
-const Branch = require('../models/Branch');
-const { resolveBranchId } = require('../utils/branchHelper');
+const { resolveBranchId, resolveBranchReference, isBranchAuthorized } = require('../utils/branchHelper');
 const notificationService = require('../services/notification.service');
 
 // @desc    Get public notices for a specific branch/campus
@@ -12,16 +11,10 @@ exports.getPublicCampusNotices = async (req, res, next) => {
     let targetBranchId = null;
 
     if (branchId && branchId !== 'hq' && branchId !== 'global') {
-      const branch = await Branch.findOne({
-        $or: [
-          { _id: branchId.match(/^[0-9a-fA-F]{24}$/) ? branchId : null },
-          { code: branchId.toLowerCase() }
-        ]
-      });
-      if (!branch) {
+      targetBranchId = await resolveBranchReference(branchId);
+      if (!targetBranchId) {
         return res.status(404).json({ success: false, message: 'Branch not found' });
       }
-      targetBranchId = branch._id;
     }
 
     const now = new Date();
@@ -262,8 +255,8 @@ exports.updateNotice = async (req, res, next) => {
     }
 
     const isSuper = ['super_admin', 'super_management'].includes(req.user.role);
-    if (!isSuper && notice.branchId && notice.branchId.toString() !== req.user.branchId?.toString()) {
-      return res.status(403).json({ success: false, message: 'Access denied: Notice belongs to another branch' });
+    if (!isSuper && (!notice.branchId || !isBranchAuthorized(req, notice.branchId))) {
+      return res.status(403).json({ success: false, message: 'Access denied: Notice belongs to another branch or HQ' });
     }
 
     const allowed = [
@@ -311,8 +304,8 @@ exports.deleteNotice = async (req, res, next) => {
     }
 
     const isSuper = ['super_admin', 'super_management'].includes(req.user.role);
-    if (!isSuper && notice.branchId && notice.branchId.toString() !== req.user.branchId?.toString()) {
-      return res.status(403).json({ success: false, message: 'Access denied: Notice belongs to another branch' });
+    if (!isSuper && (!notice.branchId || !isBranchAuthorized(req, notice.branchId))) {
+      return res.status(403).json({ success: false, message: 'Access denied: Notice belongs to another branch or HQ' });
     }
 
     await BranchNotice.findByIdAndDelete(req.params.id);
@@ -333,8 +326,8 @@ exports.togglePinNotice = async (req, res, next) => {
     }
 
     const isSuper = ['super_admin', 'super_management'].includes(req.user.role);
-    if (!isSuper && notice.branchId && notice.branchId.toString() !== req.user.branchId?.toString()) {
-      return res.status(403).json({ success: false, message: 'Access denied: Notice belongs to another branch' });
+    if (!isSuper && (!notice.branchId || !isBranchAuthorized(req, notice.branchId))) {
+      return res.status(403).json({ success: false, message: 'Access denied: Notice belongs to another branch or HQ' });
     }
 
     notice.isPinned = !notice.isPinned;
