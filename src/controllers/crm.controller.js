@@ -1,5 +1,6 @@
 const LeadCRM = require('../models/LeadCRM');
 const { isBranchAuthorized } = require('../middleware/rbac.middleware');
+const { escapeRegex } = require('../utils/regex');
 
 /**
  * @desc  Get all leads (paginated + filterable)
@@ -21,11 +22,14 @@ const getLeads = async (req, res, next) => {
 
     if (status && status !== 'all') filter.status = status;
     if (source && source !== 'all') filter.source = source;
-    if (q) filter.$or = [
-      { name:  { $regex: q, $options: 'i' } },
-      { email: { $regex: q, $options: 'i' } },
-      { phone: { $regex: q, $options: 'i' } },
-    ];
+    if (q) {
+      const escapedQ = escapeRegex(String(q).trim());
+      filter.$or = [
+        { name:  { $regex: escapedQ, $options: 'i' } },
+        { email: { $regex: escapedQ, $options: 'i' } },
+        { phone: { $regex: escapedQ, $options: 'i' } },
+      ];
+    }
 
     const total = await LeadCRM.countDocuments(filter);
     const leads = await LeadCRM.find(filter)
