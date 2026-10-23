@@ -27,10 +27,10 @@ const getCourses = async (req, res, next) => {
   try {
     // Set public cache for 5 mins (browser) and 10 mins (CDN/Varnish)
     res.set("Cache-Control", "public, max-age=300, s-maxage=600");
+    const pageNum = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limitNum = Math.min(Math.max(1, parseInt(req.query.limit, 10) || 12), 100);
     const {
       category,
-      page = 1,
-      limit = 12,
       branchId,
       isMaster,
       includeUnpublished,
@@ -130,8 +130,8 @@ const getCourses = async (req, res, next) => {
       .select("title slug thumbnail price originalPrice category instructor tagline totalStudents isPopular mode duration branchId availableBranches isAllBranches")
       .populate("instructor", "name avatar")
       .sort("-createdAt")
-      .skip((Math.max(1, Number(page)) - 1) * Number(limit))
-      .limit(Number(limit))
+      .skip((pageNum - 1) * limitNum)
+      .limit(limitNum)
       .lean();
 
     const countPromise = Course.countDocuments(filter);
@@ -142,8 +142,8 @@ const getCourses = async (req, res, next) => {
       success: true,
       count: courses.length,
       totalCount,
-      totalPages: Math.ceil(totalCount / Number(limit)),
-      currentPage: Number(page),
+      totalPages: Math.ceil(totalCount / limitNum),
+      currentPage: pageNum,
       data: courses
     };
 
