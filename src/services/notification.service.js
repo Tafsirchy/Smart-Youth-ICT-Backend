@@ -4,6 +4,7 @@ const Branch = require('../models/Branch');
 const emailService = require('./email.service');
 const smsService = require('./sms.service');
 const { emitNotification } = require('../sockets/socket');
+const { logger } = require('../utils/logger');
 
 /**
  * Universal Master Dispatcher for Enterprise Notifications
@@ -54,7 +55,15 @@ const dispatchNotification = async ({
         if (courseDoc?.branchId) {
           resolvedBranchId = courseDoc.branchId;
         }
-      } catch (e) {}
+      } catch (e) {
+        // Optional enrichment: the notification is still delivered, only the
+        // branch scope stays unresolved.
+        logger.warn('notification course lookup failed', {
+          courseId: metadata?.courseId,
+          title,
+          err: e,
+        });
+      }
     }
 
     // Resolve branch name for metadata if not provided
@@ -66,7 +75,13 @@ const dispatchNotification = async ({
           metadata.branchCode = branchDoc.code;
         }
       } catch (e) {
-        // Non-blocking
+        // Optional enrichment: the notification is still delivered, only the
+        // branch label stays empty.
+        logger.warn('notification branch lookup failed', {
+          branchId: resolvedBranchId?.toString(),
+          title,
+          err: e,
+        });
       }
     }
 
@@ -121,14 +136,23 @@ const dispatchNotification = async ({
         createdAt: notification.createdAt,
       });
     } catch (wsErr) {
-      console.error('[WebSocket Notification Error]', wsErr.message);
+      logger.error('notification realtime emission failed', {
+        notificationId: notification._id,
+        title,
+        err: wsErr,
+      });
     }
 
     // 3. Optional Email Mirroring
     if (mirrorEmail && targetUserDoc?.email) {
       setTimeout(() => {
         emailService.sendCustomEmail(targetUserDoc, title, message).catch((mErr) => {
-          console.error('[Notification Email Mirror Failed]', mErr.message);
+          logger.error('notification email mirror failed', {
+            notificationId: notification._id,
+            recipient: targetUserDoc.email,
+            title,
+            err: mErr,
+          });
         });
       }, 0);
     }
@@ -138,14 +162,29 @@ const dispatchNotification = async ({
       setTimeout(() => {
         const smsText = `[SYICT] ${title}: ${message.slice(0, 120)}`;
         smsService.sendSMS(targetUserDoc.phone, smsText).catch((sErr) => {
-          console.error('[Notification SMS Mirror Failed]', sErr.message);
+          logger.error('notification sms mirror failed', {
+            notificationId: notification._id,
+            recipient: targetUserDoc.phone,
+            title,
+            err: sErr,
+          });
         });
       }, 0);
     }
 
     return notification;
   } catch (err) {
-    console.error('[Dispatch Notification Error]', err.message);
+    // The notification was not delivered. The failure is recorded so it can
+    // be traced; the caller decides whether the surrounding action still
+    // succeeds.
+    logger.error('notification dispatch failed', {
+      title,
+      category,
+      targetRole,
+      branchId: branchId ? branchId.toString() : undefined,
+      userId: user ? (user._id || user).toString() : undefined,
+      err,
+    });
     return null;
   }
 };
