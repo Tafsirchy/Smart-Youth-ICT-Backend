@@ -49,16 +49,36 @@ exports.getPublicBranches = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+let publicBranchesCache = null;
+let lastBranchesCacheTime = 0;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+exports.invalidatePublicBranchesCache = () => {
+  publicBranchesCache = null;
+  lastBranchesCacheTime = 0;
+};
+
 // @desc    Get detailed list of active branches for public directory
 // @route   GET /api/branches/public/all
 // @access  Public
 exports.getPublicBranchesDetailed = async (req, res, next) => {
   try {
     res.set('Cache-Control', 'public, max-age=600, s-maxage=1800');
+
+    if (publicBranchesCache && (Date.now() - lastBranchesCacheTime < CACHE_TTL_MS)) {
+      return res.json(publicBranchesCache);
+    }
+
     const branches = await Branch.find({ isActive: true })
       .select('name code slug type division address contact location officeHours facilities coverImage gallery logo website whatsapp notice isActive')
-      .sort({ type: 1, name: 1 });
-    res.json({ success: true, count: branches.length, data: branches });
+      .sort({ type: 1, name: 1 })
+      .lean();
+
+    const responsePayload = { success: true, count: branches.length, data: branches };
+    publicBranchesCache = responsePayload;
+    lastBranchesCacheTime = Date.now();
+
+    res.json(responsePayload);
   } catch (err) { next(err); }
 };
 
