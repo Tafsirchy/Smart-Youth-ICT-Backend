@@ -7,19 +7,24 @@ const {
   deleteExpense
 } = require('../controllers/expense.controller');
 const { protect } = require('../middleware/auth.middleware');
-const { authorize } = require('../middleware/role.middleware');
+const { requireAccess } = require('../middleware/rbac.middleware');
+const { PERMISSIONS } = require('../config/permissions');
 
 const router = express.Router();
 
 router.use(protect);
 
-const staffAndManagers = ['super_admin', 'super_management', 'admin', 'branch_admin', 'branch_management', 'staff', 'employee', 'instructor'];
-const managersOnly = ['super_admin', 'super_management', 'admin', 'branch_admin', 'branch_management'];
+// The expense ledger is a branch-management resource. `staff:manage` is
+// accepted alongside the granular permissions because it is what the
+// dashboard navigation already gates these screens on.
+const canViewExpenses = requireAccess(PERMISSIONS.EXPENSES_VIEW, PERMISSIONS.STAFF_MANAGE);
+const canManageExpenses = requireAccess(PERMISSIONS.EXPENSES_MANAGE, PERMISSIONS.STAFF_MANAGE);
+const managersOnly = requireAccess(PERMISSIONS.EXPENSES_MANAGE, PERMISSIONS.STAFF_MANAGE);
 
-router.get('/', authorize(...staffAndManagers), getBranchExpenses);
-router.post('/', authorize(...staffAndManagers), createExpense);
-router.put('/:id', authorize(...staffAndManagers), updateExpense);
-router.patch('/:id/approval', authorize(...managersOnly), processExpenseApproval);
-router.delete('/:id', authorize(...managersOnly), deleteExpense);
+router.get('/', canViewExpenses, getBranchExpenses);
+router.post('/', canManageExpenses, createExpense);
+router.put('/:id', canManageExpenses, updateExpense);
+router.patch('/:id/approval', managersOnly, processExpenseApproval);
+router.delete('/:id', managersOnly, deleteExpense);
 
 module.exports = router;

@@ -4,11 +4,13 @@ const { uploadToImageBB } = require('../services/imagebb.service');
 const router  = express.Router();
 const { protect } = require('../middleware/auth.middleware');
 const { requireAccess, isBranchAuthorized } = require('../middleware/rbac.middleware');
+const { authorize } = require('../middleware/role.middleware');
 const { PERMISSIONS } = require('../config/permissions');
 const Payment    = require('../models/Payment');
 const Enrollment = require('../models/Enrollment');
 const Course     = require('../models/Course');
 const { validateCouponForAmount } = require('../services/coupon.service');
+const { validateImageUpload } = require('../utils/imageValidation');
 const { 
   initializeCheckout, 
   stripeWebhook, 
@@ -24,7 +26,11 @@ const {
 // Checkout Routing
 // ─────────────────────────────────────────────────────────
 router.post('/checkout', protect, initializeCheckout);
-router.post('/:id/replay-webhook', protect, requireAccess('super_admin', 'super_management'), replayPaymentWebhook);
+// Replaying a gateway callback marks a payment as completed and provisions an
+// enrollment, so it stays a super-role operation. `requireAccess` takes
+// permission names, not role names, and it grants branch roles a blanket pass
+// — the role guard below is what actually keeps branch admins out.
+router.post('/:id/replay-webhook', protect, authorize('super_admin', 'super_management'), replayPaymentWebhook);
 router.get('/export', protect, requireAccess(PERMISSIONS.PAYMENTS_VIEW, PERMISSIONS.PAYMENTS_VERIFY), exportPaymentsCSV);
 router.get('/', protect, requireAccess(PERMISSIONS.PAYMENTS_VIEW, PERMISSIONS.PAYMENTS_VERIFY), getPayments);
 
@@ -46,7 +52,10 @@ router.post('/manual/submit', protect, handleSlipUpload, async (req, res, next) 
     if (typeof body === 'string') {
       try {
         body = JSON.parse(body);
-      } catch (e) {}
+      } catch (e) {
+        req.log?.error('manual payment body is not valid JSON', { err: e });
+        return res.status(400).json({ success: false, message: 'Malformed request body' });
+      }
     }
     const courseId = body.courseId || body.course || body.course_id;
     let rawAmount = body.amount;
@@ -65,34 +74,50 @@ router.post('/manual/submit', protect, handleSlipUpload, async (req, res, next) 
       return res.status(400).json({ success: false, message: 'Course ID, amount, and payment method are required' });
     }
 
+    // The course is the source of truth for both the branch and the price.
+    const courseDoc = await Course.findById(courseId);
+    if (!courseDoc) {
+      return res.status(404).json({ success: false, message: 'Course not found' });
+    }
+    if (courseDoc.price === undefined || courseDoc.price === null || Number.isNaN(Number(courseDoc.price))) {
+      return res.status(400).json({ success: false, message: 'This course has no configured price' });
+    }
+
+    // The client never decides what was paid. The authoritative amount always
+    // comes from the course price; the value the payer declared is kept
+    // separately so verification can compare the two.
+    const originalAmount = Number(courseDoc.price);
+    let expectedAmount = originalAmount;
+
     // Server-side coupon application — client amount is never trusted when a coupon is used
     let coupon = null;
     let discountAmount = 0;
-    let originalAmount = null;
     if (couponCode) {
-      const courseDoc = await Course.findById(courseId);
-      if (!courseDoc) {
-        return res.status(404).json({ success: false, message: 'Course not found' });
-      }
-      originalAmount = Number(courseDoc.price);
       const couponCheck = await validateCouponForAmount({
         code: couponCode,
         amount: originalAmount,
         courseId: courseId.toString(),
-        branchId: body.branchId || req.user.branchId
+        branchId: courseDoc.branchId || req.user.branchId
       });
       if (!couponCheck.ok) {
         return res.status(couponCheck.status).json({ success: false, message: couponCheck.message });
       }
       coupon = couponCheck.coupon;
       discountAmount = couponCheck.discountAmount;
+      expectedAmount = Math.max(0, originalAmount - discountAmount);
     }
 
     if (req.file) {
+      // The slip is validated by content, not by the declared type.
+      const slipValidation = validateImageUpload(req.file.buffer, req.file.mimetype);
+      if (!slipValidation.ok) {
+        return res.status(slipValidation.status).json({ success: false, message: slipValidation.message });
+      }
+
       try {
         slipUrl = await uploadToImageBB(req.file.buffer);
-      } catch (e) {
-        slipUrl = `data:${req.file.mimetype || 'image/jpeg'};base64,${req.file.buffer.toString('base64')}`;
+      } catch {
+        slipUrl = `data:${slipValidation.mime};base64,${req.file.buffer.toString('base64')}`;
       }
     }
 
@@ -107,21 +132,19 @@ router.post('/manual/submit', protect, handleSlipUpload, async (req, res, next) 
       return res.status(409).json({ success: false, message: 'A payment record already exists for this course' });
     }
 
-    // Determine branch context
-    let targetBranchId = body.branchId || req.user.branchId;
-    if (!targetBranchId && courseId) {
-      const course = await Course.findById(courseId);
-      if (course && course.branchId) targetBranchId = course.branchId;
-    }
+    // The course owns the branch context — the client cannot re-point a
+    // payment at another tenant.
+    const targetBranchId = courseDoc.branchId || req.user.branchId;
 
-    const finalAmount = coupon ? Math.max(0, originalAmount - discountAmount) : amount;
+    const amountMismatch = Math.abs(amount - expectedAmount) > 0.5;
 
     const payment = await Payment.create({
       user: req.user._id, 
       course: courseId,
       branchId: targetBranchId || undefined,
       method: method || 'bank', 
-      amount: finalAmount,
+      amount: expectedAmount,
+      declaredAmount: amount,
       originalAmount: coupon ? originalAmount : undefined,
       discountAmount: coupon ? discountAmount : 0,
       coupon: coupon ? coupon._id : undefined,
@@ -132,7 +155,13 @@ router.post('/manual/submit', protect, handleSlipUpload, async (req, res, next) 
       slip: slipUrl || '', 
       status: 'pending',
     });
-    res.status(201).json({ success: true, data: payment, message: 'Payment submitted for review' });
+    res.status(201).json({
+      success: true,
+      data: payment,
+      message: amountMismatch
+        ? 'Payment submitted for review. The submitted amount differs from the course price and needs an administrator override.'
+        : 'Payment submitted for review',
+    });
   } catch (err) { next(err); }
 });
 
@@ -170,6 +199,37 @@ router.put('/:id/verify', protect, requireAccess(PERMISSIONS.PAYMENTS_VERIFY), a
     // Strict Tenant Isolation Check
     if (!isBranchAuthorized(req, payment.branchId)) {
       return res.status(403).json({ message: 'Access denied: Payment belongs to another branch' });
+    }
+
+    // Amount integrity: a manual payment whose declared amount differs from
+    // the authoritative course price cannot be approved without an explicit
+    // override. Rejecting is always allowed — a mismatch is a valid reason to
+    // reject the payment.
+    const declaredAmount = payment.declaredAmount;
+    const hasMismatch =
+      declaredAmount !== undefined &&
+      declaredAmount !== null &&
+      Math.abs(Number(declaredAmount) - Number(payment.amount)) > 0.5;
+
+    if (hasMismatch && status === 'completed') {
+      const isSuper = req.user.role === 'super_admin' || req.user.role === 'super_management';
+      const canOverride =
+        isSuper || (req.user.permissions || []).includes(PERMISSIONS.PAYMENTS_OVERRIDE_AMOUNT);
+
+      if (!canOverride) {
+        return res.status(409).json({
+          success: false,
+          message:
+            'Amount mismatch: the submitted amount does not match the course price. An administrator with amount-override rights must approve this payment.',
+          declaredAmount,
+          expectedAmount: payment.amount,
+          requiresOverride: true,
+        });
+      }
+
+      payment.amountOverridden = true;
+      payment.amountOverriddenBy = req.user._id;
+      payment.amountOverriddenAt = new Date();
     }
 
     payment.status = status;

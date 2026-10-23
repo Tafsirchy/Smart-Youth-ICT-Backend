@@ -28,6 +28,7 @@ const {
   forgotPasswordValidation,
   resetPasswordValidation,
   googleAuthValidation,
+  updatePasswordValidation,
   handleValidation,
 } = require("../middleware/authValidation.middleware");
 
@@ -64,7 +65,7 @@ router.get("/verify-email", verifyEmail);
 router.post("/resend-verification", emailLimiter, resendVerification);
 router.get("/me", protect, getMe);
 router.put("/profile", protect, updateProfile);
-router.put("/password", protect, updatePassword);
+router.put("/password", protect, updatePasswordValidation, handleValidation, updatePassword);
 router.post(
   "/impersonate/:userId",
   protect,

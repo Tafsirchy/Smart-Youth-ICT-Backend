@@ -15,6 +15,6 @@ router.get('/:id', protect, getProjectDetails);
 
 router.post('/:id/apply', protect, authorize('student'), applyToProject);
 
-router.post('/', protect, authorize('admin', 'instructor'), createProject);
+router.post('/', protect, authorize('super_admin', 'super_management', 'branch_admin', 'branch_management', 'admin', 'instructor'), createProject);
 
 module.exports = router;

@@ -18,6 +18,6 @@ router.get('/:id', protect, getQuizDetails);
 router.post('/:id/submit', protect, authorize('student'), submitQuiz);
 
 // Admin / Instructor actions
-router.post('/', protect, authorize('admin', 'instructor'), createQuiz);
+router.post('/', protect, authorize('super_admin', 'super_management', 'branch_admin', 'admin', 'instructor'), createQuiz);
 
 module.exports = router;

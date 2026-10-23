@@ -15,8 +15,11 @@ router.get('/',     protect, getLessonsByCourse);   // ?courseId=xxx
 router.get('/:id',  protect, getLessonById);
 
 // Instructor / Admin
-router.post('/',    protect, authorize('admin', 'instructor'), createLesson);
-router.put('/:id',  protect, authorize('admin', 'instructor'), updateLesson);
-router.delete('/:id', protect, authorize('admin'), deleteLesson);
+const lessonManagers = ['super_admin', 'super_management', 'branch_admin', 'branch_management', 'admin', 'instructor'];
+const lessonAdmins = ['super_admin', 'super_management', 'branch_admin', 'admin'];
+
+router.post('/',    protect, authorize(...lessonManagers), createLesson);
+router.put('/:id',  protect, authorize(...lessonManagers), updateLesson);
+router.delete('/:id', protect, authorize(...lessonAdmins), deleteLesson);
 
 module.exports = router;

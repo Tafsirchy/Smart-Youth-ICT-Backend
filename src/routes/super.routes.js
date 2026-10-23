@@ -16,6 +16,7 @@ const {
   toggleCourseAllBranches, 
   getGlobalFinanceReport,
   exportGlobalLedger, 
+  exportExecutiveSummary,
   getAuditLogs,
   getTickets,
   replyToTicket,
@@ -71,6 +72,7 @@ router.patch('/courses/:id/toggle-all-branches', toggleCourseAllBranches);
 // Global Finance
 router.get('/finance',               getGlobalFinanceReport);
 router.get('/finance/export-ledger', exportGlobalLedger);
+router.get('/reports/executive-summary', exportExecutiveSummary);
 
 // Support & SLA Governance
 router.get('/tickets',              getTickets);

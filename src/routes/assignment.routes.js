@@ -23,8 +23,10 @@ router.get('/my-submissions', protect, authorize('student'), getMySubmissions);
 router.post('/:id/submit', protect, authorize('student'), submitAssignment);
 
 // Admin / Instructor actions
-router.get('/instructor/submissions', protect, authorize('admin', 'instructor'), getInstructorSubmissions);
-router.post('/', protect, authorize('admin', 'instructor'), createAssignment);
-router.put('/submissions/:id/grade', protect, authorize('admin', 'instructor'), gradeSubmission);
+const assignmentManagers = ['super_admin', 'super_management', 'branch_admin', 'branch_management', 'admin', 'instructor'];
+
+router.get('/instructor/submissions', protect, authorize(...assignmentManagers), getInstructorSubmissions);
+router.post('/', protect, authorize(...assignmentManagers), createAssignment);
+router.put('/submissions/:id/grade', protect, authorize(...assignmentManagers), gradeSubmission);
 
 module.exports = router;
