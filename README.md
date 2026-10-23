@@ -68,12 +68,16 @@ Smart Youth ICT is a sophisticated platform designed to elevate youth engagement
 **Backend**
 - **Server:** Express.js 4.18 (Node.js)
 - **Database:** MongoDB with Mongoose 8.10
-- **Security:** bcryptjs, helmet, express-rate-limit, cors
+- **Security:** bcryptjs, helmet, express-rate-limit, cors, eslint-plugin-security
 - **Auth:** jsonwebtoken & google-auth-library
-- **Payment:** Stripe API
+- **Payment Gateways:** Stripe API, bKash (Tokenized Checkout), Nagad
+- **SMS Gateway:** SSLWireless
+- **Validation & CMS Contract:** Zod
 - **Files:** Multer for uploads
 - **Mailing:** Nodemailer & Resend
-- **Utilities:** Puppeteer (PDF/Scraping), Node-Cron
+- **Utilities:** Node-Cron, node-cache, crypto AES-256-GCM
+- **Testing & Quality:** Jest, Supertest, MongoMemoryServer, ESLint 9
+
 
 ## 📁 Project Structure
 
@@ -124,6 +128,40 @@ The API only accepts browser requests from an exact-match allowlist. The primary
 front-end origin comes from `FRONTEND_URL`; any additional origins (for example
 a preview deployment) must be listed explicitly as a comma-separated value in
 `ALLOWED_ORIGINS`. Requests from any other origin are rejected with `403`.
+
+**Logging**
+
+Every request is given an id (`X-Request-Id`), and the application log is
+written as JSON lines so it can be shipped to a log store without a parser.
+Once a request is authenticated the account and branch are attached to the
+line. Credential-shaped fields (`token`, `secret`, `password`, `authorization`,
+`cookie`, `otp`, …) are replaced before a line is written, so a token can
+never end up in the log.
+
+`LOG_LEVEL` selects the level (`debug`, `info`, `warn`, `error`, `silent`).
+It defaults to `debug` in development, `info` in production and `silent` in
+the test environment.
+
+**Database backups**
+
+`GET /api/super/system/backup/download` streams every collection out of the
+database, removes all credential fields (passwords, reset/invite tokens, 2FA
+secrets, OTPs, session tokens), compresses the dump and encrypts it with
+AES-256-GCM before it touches the disk. The temporary artifact is written
+outside the web root and deleted as soon as it has been delivered, so it is
+never reachable through a static URL.
+
+The key is read from the environment, so it can be injected by a secret manager
+(KMS) instead of being typed into a file:
+
+| Variable | Purpose |
+|:---|:---|
+| `BACKUP_ENCRYPTION_KEY` | 32 bytes as hex or base64. Any other passphrase is stretched with HKDF-SHA256. Required — without it the endpoint fails closed with `503`. |
+| `BACKUP_ENCRYPTION_KEY_ID` | Identifier of the key, recorded in the artifact header so an old backup can be matched with the key that made it. |
+| `BACKUP_DIR` | Directory for the temporary artifact. Defaults to a `syict-backups` folder in the system temp directory. |
+
+Rotate the key by writing a new value and restarting the server. Keep the old
+value until every artifact made with it has been replaced or archived.
 
 **Step 2: Setup Frontend**
 1. Navigate to frontend directory:
