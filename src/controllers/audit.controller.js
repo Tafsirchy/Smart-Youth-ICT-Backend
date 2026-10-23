@@ -58,6 +58,16 @@ const getDateRange = (period, customStart, customEnd) => {
   return { start, end, priorStart, priorEnd };
 };
 
+const AUDIT_CACHE_TTL = 30 * 1000; // 30 seconds
+const auditReportCache = new Map();
+
+const getLocalizedTitle = (t) => {
+  if (!t) return 'Course';
+  if (typeof t === 'string') return t;
+  if (typeof t === 'object') return t.en || t.bn || 'Course';
+  return String(t);
+};
+
 /**
  * @desc    Get Comprehensive 360° Audit & Monitoring Report for Branch(es)
  * @route   GET /api/super/audit/branch-report
@@ -66,6 +76,12 @@ const getDateRange = (period, customStart, customEnd) => {
 exports.getBranchComprehensiveAuditReport = async (req, res, next) => {
   try {
     const { branchId, period = 'monthly', startDate, endDate } = req.query;
+
+    const cacheKey = `${branchId || 'all'}:${period}:${startDate || ''}:${endDate || ''}`;
+    const cached = auditReportCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp < AUDIT_CACHE_TTL)) {
+      return res.json(cached.data);
+    }
 
     const isAllBranches = !branchId || branchId === 'all';
     let branchObjectId = null;
@@ -549,8 +565,8 @@ exports.getBranchComprehensiveAuditReport = async (req, res, next) => {
                 trainerName: r1.trainer?.name || 'Trainer',
                 batch1: r1.batchName,
                 batch2: r2.batchName,
-                course1: r1.course?.title,
-                course2: r2.course?.title
+                course1: getLocalizedTitle(r1.course?.title),
+                course2: getLocalizedTitle(r2.course?.title)
               });
             }
           }
@@ -611,9 +627,9 @@ exports.getBranchComprehensiveAuditReport = async (req, res, next) => {
         actionType: 'send_installment_reminders',
         items: overduePayments.map(p => ({
           _id: p._id,
-          studentName: p.user?.name,
-          phone: p.user?.phone,
-          course: p.course?.title,
+          studentName: p.user?.name || 'Student',
+          phone: p.user?.phone || 'N/A',
+          course: getLocalizedTitle(p.course?.title),
           amount: p.amount,
           dueDate: p.createdAt
         }))
@@ -701,7 +717,7 @@ exports.getBranchComprehensiveAuditReport = async (req, res, next) => {
     }
 
     // ─── 5. FORMAT FINAL PAYLOAD ────────────────────────────────────────
-    res.json({
+    const payload = {
       success: true,
       meta: {
         branchId: branchId || 'all',
@@ -760,7 +776,10 @@ exports.getBranchComprehensiveAuditReport = async (req, res, next) => {
           : 0,
         activeStudents: activeEnrollmentsTotal,
         paymentStatusBreakdown: enrollmentStatusAgg,
-        popularCourses: coursePopularityAgg,
+        popularCourses: (coursePopularityAgg || []).map(c => ({
+          ...c,
+          title: getLocalizedTitle(c.title)
+        })),
         activeRoutinesCount: classRoutines.length,
         scheduleConflictsCount: routineConflicts.length
       },
@@ -807,7 +826,10 @@ exports.getBranchComprehensiveAuditReport = async (req, res, next) => {
         members: staffMembers
       },
       availableBranches: allBranchesList
-    });
+    };
+
+    auditReportCache.set(cacheKey, { timestamp: Date.now(), data: payload });
+    res.json(payload);
   } catch (err) {
     next(err);
   }
