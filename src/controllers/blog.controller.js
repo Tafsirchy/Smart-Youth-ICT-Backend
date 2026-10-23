@@ -21,6 +21,24 @@ async function generateUniqueSlug(title, existingId = null) {
   return slug;
 }
 
+/** Strict HTML sanitizer for rich text blog content */
+function cleanBlogContent(rawHtml) {
+  if (!rawHtml || typeof rawHtml !== 'string') return '';
+  return sanitizeHtml(rawHtml, {
+    allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'h1', 'h2', 'span', 'div', 'video', 'figure', 'figcaption']),
+    allowedAttributes: {
+      ...sanitizeHtml.defaults.allowedAttributes,
+      '*': ['class'],
+      a: ['href', 'name', 'target', 'rel'],
+      img: ['src', 'alt', 'title', 'width', 'height', 'loading'],
+    },
+    allowedSchemes: ['http', 'https', 'mailto'],
+    transformTags: {
+      a: sanitizeHtml.simpleTransform('a', { rel: 'noopener noreferrer' })
+    }
+  });
+}
+
 // ─── Controllers ──────────────────────────────────────────────────────────────
 
 /**
@@ -32,6 +50,12 @@ const getAllPosts = async (req, res, next) => {
   try {
     const { page = 1, limit = 9, tag, q, branchId } = req.query;
     const isAdmin = req.user && ['super_admin', 'super_management', 'branch_admin'].includes(req.user.role);
+    if (!isAdmin) {
+      res.set('Cache-Control', 'public, max-age=300, s-maxage=600');
+    }
+
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(Math.max(1, parseInt(limit, 10) || 9), 100);
 
     const filter = {};
     if (!isAdmin) filter.isPublished = true;
@@ -74,10 +98,10 @@ const getAllPosts = async (req, res, next) => {
       .populate('author', 'name avatar')
       .select('-content') // Exclude heavy content from listing
       .sort('-createdAt')
-      .skip((page - 1) * limit)
-      .limit(Number(limit));
+      .skip((pageNum - 1) * limitNum)
+      .limit(limitNum);
 
-    res.json({ success: true, total, page: Number(page), data: posts });
+    res.json({ success: true, total, page: pageNum, limit: limitNum, data: posts });
   } catch (err) {
     next(err);
   }
@@ -107,7 +131,10 @@ const getPostBySlug = async (req, res, next) => {
     post.views = (post.views || 0) + 1;
     await post.save({ validateBeforeSave: false });
 
-    res.json({ success: true, data: post });
+    const postData = post.toObject();
+    postData.content = cleanBlogContent(postData.content);
+
+    res.json({ success: true, data: postData });
   } catch (err) {
     next(err);
   }
@@ -124,13 +151,7 @@ const createPost = async (req, res, next) => {
     const slug = await generateUniqueSlug(title);
 
     // Sanitize content to prevent XSS
-    const cleanContent = sanitizeHtml(content || "", {
-      allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'h1', 'h2', 'span', 'div']),
-      allowedAttributes: {
-        ...sanitizeHtml.defaults.allowedAttributes,
-        '*': ['style', 'class'],
-      }
-    });
+    const cleanContent = cleanBlogContent(content || "");
 
     const isSuper = req.user && ['super_admin', 'super_management'].includes(req.user.role);
     let postBranchId = req.body.branchId || (!isSuper ? req.user.branchId : null);
@@ -193,13 +214,7 @@ const updatePost = async (req, res, next) => {
     if (excerpt !== undefined) post.excerpt = excerpt;
     
     if (content !== undefined) {
-      post.content = sanitizeHtml(content, {
-        allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'h1', 'h2', 'span', 'div']),
-        allowedAttributes: {
-          ...sanitizeHtml.defaults.allowedAttributes,
-          '*': ['style', 'class'],
-        }
-      });
+      post.content = cleanBlogContent(content);
     }
 
     if (thumbnail !== undefined) post.thumbnail = thumbnail;
