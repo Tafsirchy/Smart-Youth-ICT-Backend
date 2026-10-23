@@ -1,30 +1,8 @@
 const crypto = require('crypto');
-const ejs = require('ejs');
-const path = require('path');
-const fs = require('fs');
-let chromium;
-let puppeteer;
-
-if (process.env.VERCEL) {
-  // Use Vercel specific puppeteer-core and chromium
-  try {
-    puppeteer = require('puppeteer-core');
-    chromium = require('@sparticuz/chromium');
-  } catch (e) {
-    console.error('Failed to load serverless puppeteer dependencies:', e.message);
-  }
-} else {
-  // Use standard puppeteer for local dev
-  try {
-    puppeteer = require('puppeteer');
-  } catch (e) {
-    console.warn('Puppeteer not installed or failed to load');
-  }
-}
-
 const Certificate = require('../models/Certificate');
 const Course = require('../models/Course');
 const Progress = require('../models/Progress');
+const certificateService = require('../services/certificate.service');
 
 // Helper to generate unique credential ID
 const generateCredentialId = () => crypto.randomBytes(6).toString('hex').toUpperCase();
@@ -68,85 +46,29 @@ exports.getCertificate = async (req, res, next) => {
 // @access  Private
 exports.downloadCertificate = async (req, res, next) => {
   try {
-    if (!puppeteer) {
-       return res.status(500).json({ success: false, message: 'PDF generation engine is not available.' });
-    }
-
     const certificateId = req.params.id;
     const certificate = await Certificate.findById(certificateId)
       .populate('student', 'name email')
       .populate('course', 'title');
 
     if (!certificate) return res.status(404).json({ success: false, message: 'Certificate not found' });
-    
-    // Ensure the student owns the certificate or is an admin
-    if (certificate.student._id.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+
+    // Ensure the student owns the certificate or is staff/admin
+    const isStaffOrAdmin = ['super_admin', 'super_management', 'branch_admin', 'branch_management'].includes(req.user.role);
+    if (certificate.student._id.toString() !== req.user._id.toString() && !isStaffOrAdmin) {
       return res.status(403).json({ success: false, message: 'Not authorized to download this certificate' });
     }
 
-    // We use a simple HTML string to render the PDF for now
-    // In production, you would map this to a heavily styled EJS template in a 'views' directory
-    const htmlContent = `
-      <html>
-        <head>
-          <style>
-             body { font-family: 'Helvetica', sans-serif; text-align: center; margin: 0; padding: 0; }
-             .container { padding: 100px; border: 20px solid #2563eb; margin: 50px; border-radius: 10px; }
-             h1 { font-size: 50px; color: #1e3a8a; margin-bottom: 10px; }
-             h2 { font-size: 30px; color: #4b5563; font-weight: normal; margin-bottom: 40px; }
-             .student-name { font-size: 40px; font-weight: bold; color: #111827; border-bottom: 2px solid #e5e7eb; display: inline-block; padding-bottom: 10px; margin-bottom: 40px; }
-             .course-name { font-size: 35px; color: #2563eb; font-weight: bold; }
-             .footer { margin-top: 80px; display: flex; justify-content: space-between; color: #6b7280; }
-             .credential { font-size: 14px; margin-top: 40px; color: #9ca3af; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h1>Certificate of Completion</h1>
-            <h2>This is proudly presented to</h2>
-            <div class="student-name">${certificate.student.name}</div>
-            <h2>For successfully completing the course</h2>
-            <div class="course-name">${certificate.course.title.en || certificate.course.title}</div>
-            
-            <div class="footer">
-               <div>
-                 <p>Smart Youth ICT Platform</p>
-                 <p>Date: ${new Date(certificate.issueDate).toLocaleDateString()}</p>
-               </div>
-               <div>
-                 <p>_______________________</p>
-                 <p>Lead Instructor</p>
-               </div>
-            </div>
-            <div class="credential">Credential ID: ${certificate.credentialId}</div>
-          </div>
-        </body>
-      </html>
-    `;
-
-    let browser;
-    if (process.env.VERCEL) {
-      browser = await puppeteer.launch({
-        args: chromium.args,
-        defaultViewport: chromium.defaultViewport,
-        executablePath: await chromium.executablePath(),
-        headless: chromium.headless,
-        ignoreHTTPSErrors: true,
+    let pdfBuffer;
+    try {
+      pdfBuffer = await certificateService.renderPdf(certificate);
+    } catch (renderError) {
+      req.log?.error('certificate pdf rendering failed', { certificateId, err: renderError });
+      return res.status(503).json({
+        success: false,
+        message: 'PDF generation is currently unavailable. The certificate can still be verified with its credential id.',
       });
-    } else {
-      browser = await puppeteer.launch({ headless: 'new' });
     }
-    const page = await browser.newPage();
-    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
-    
-    const pdfBuffer = await page.pdf({
-      format: 'Letter',
-      landscape: true,
-      printBackground: true,
-      margin: { top: '0', right: '0', bottom: '0', left: '0' }
-    });
-
-    await browser.close();
 
     res.set({
       'Content-Type': 'application/pdf',
