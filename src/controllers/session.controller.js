@@ -1,5 +1,4 @@
 const Session = require('../models/Session');
-const Course = require('../models/Course');
 const { isBranchAuthorized } = require('../middleware/rbac.middleware');
 
 // @desc    Get all sessions for a branch/course
