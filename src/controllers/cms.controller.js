@@ -299,7 +299,7 @@ exports.updateServicePageContent = async (req, res, next) => {
 // 2. Career Tracks
 exports.getCareerTracks = async (req, res, next) => {
   try {
-    const tracks = await CareerTrack.find().sort("order createdAt");
+    const tracks = await CareerTrack.find().sort("order createdAt").lean();
     res.json({ success: true, data: tracks });
   } catch (err) { next(err); }
 };
@@ -328,7 +328,7 @@ exports.deleteCareerTrack = async (req, res, next) => {
 // 3. Certifications
 exports.getCertificationPrograms = async (req, res, next) => {
   try {
-    const programs = await CertificationProgram.find().sort("order createdAt");
+    const programs = await CertificationProgram.find().sort("order createdAt").lean();
     res.json({ success: true, data: programs });
   } catch (err) { next(err); }
 };
@@ -357,7 +357,7 @@ exports.deleteCertificationProgram = async (req, res, next) => {
 // 4. Freelancing
 exports.getFreelancingPrograms = async (req, res, next) => {
   try {
-    const programs = await FreelancingTraining.find().sort("order -createdAt");
+    const programs = await FreelancingTraining.find().sort("order -createdAt").lean();
     res.json({ success: true, data: programs });
   } catch (err) { next(err); }
 };

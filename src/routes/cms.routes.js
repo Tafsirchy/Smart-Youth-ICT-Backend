@@ -53,11 +53,13 @@ router.put("/stories/:id", updateSuccessStory);
 router.delete("/stories/:id", deleteSuccessStory);
 
 // Partners
+router.get("/partners/admin", getPartners);
 router.post("/partners", createPartner);
 router.put("/partners/:id", updatePartner);
 router.delete("/partners/:id", deletePartner);
 
 // Memberships
+router.get("/memberships/admin", getMemberships);
 router.post("/memberships", createMembership);
 router.put("/memberships/:id", updateMembership);
 router.delete("/memberships/:id", deleteMembership);
@@ -70,6 +72,7 @@ router.patch("/mentors/:id/toggle", toggleFeaturedMentor);
 
 // Testimonials
 router.get("/testimonials", getTestimonials);
+router.get("/testimonials/admin", getTestimonials);
 router.post("/testimonials", createTestimonial);
 router.put("/testimonials/:id", updateTestimonial);
 router.delete("/testimonials/:id", deleteTestimonial);

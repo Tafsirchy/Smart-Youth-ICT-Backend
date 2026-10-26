@@ -22,6 +22,10 @@ async function connectDB() {
       bufferCommands: true, // Prevents errors while connection is being established
       serverSelectionTimeoutMS: 5000, // Fail after 5s to stay within Vercel's 10s limit
       family: 4,
+      maxPoolSize: 20,
+      minPoolSize: 2,
+      maxIdleTimeMS: 30000, // Close idle connections before Atlas drops them
+      socketTimeoutMS: 45000,
     };
 
     cached.promise = mongoose.connect(process.env.MONGO_URI, opts).then(async (m) => {

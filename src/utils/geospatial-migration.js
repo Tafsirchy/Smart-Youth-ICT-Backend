@@ -23,13 +23,13 @@ const migrateToGeoJSON = async () => {
       return { migrated: 0, repaired: 0, total: 0 };
     }
 
-    const cursor = Branch.collection.find({}, { projection: { location: 1 } });
+    const branches = await Branch.collection.find({}, { projection: { location: 1 } }).toArray();
 
     let migrated = 0; // legacy lat/long → GeoJSON
     let repaired = 0; // invalid location object → removed
     let total = 0;
 
-    for await (const branch of cursor) {
+    for (const branch of branches) {
       total += 1;
       const raw = branch.location;
 
