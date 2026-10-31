@@ -14,7 +14,10 @@ const {
   getFreelancingPrograms, createFreelancingProgram, updateFreelancingProgram, deleteFreelancingProgram,
   getJobPlacements, createJobPlacement, updateJobPlacement, deleteJobPlacement,
   getWebServiceContent, updateWebServiceContent,
-  getSettingByKey, getPublicSettings
+  getSettingByKey, getPublicSettings,
+  getCompanyCertifications, adminGetCompanyCertifications,
+  createCompanyCertification, updateCompanyCertification,
+  deleteCompanyCertification, toggleCompanyCertificationStatus
 } = require("../controllers/cms.controller");
 
 const router = express.Router();
@@ -26,6 +29,8 @@ router.get("/team", getTeam);
 router.get("/stories", getSuccessStories);
 router.get("/partners", getPartners);
 router.get("/memberships", getMemberships);
+router.get("/certifications", getCompanyCertifications);
+router.get("/about-certifications", getCompanyCertifications);
 router.get("/mentors", getMentors);
 router.get("/services/content/:pageType", getServicePageContent);
 router.get("/services/career-tracks", getCareerTracks);
@@ -63,6 +68,13 @@ router.get("/memberships/admin", getMemberships);
 router.post("/memberships", createMembership);
 router.put("/memberships/:id", updateMembership);
 router.delete("/memberships/:id", deleteMembership);
+
+// 📜 Institutional Certifications (/about/certifications)
+router.get("/certifications/admin", adminGetCompanyCertifications);
+router.post("/certifications", createCompanyCertification);
+router.put("/certifications/:id", updateCompanyCertification);
+router.delete("/certifications/:id", deleteCompanyCertification);
+router.patch("/certifications/:id/toggle", toggleCompanyCertificationStatus);
 
 // Mentors
 router.post("/mentors", createMentor);

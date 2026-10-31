@@ -10,6 +10,7 @@ const FreelancingTraining = require("../models/FreelancingTraining");
 const JobPlacement = require("../models/JobPlacement");
 const ServicePageContent = require("../models/ServicePageContent");
 const WebServiceContent = require("../models/WebServiceContent");
+const CompanyCertification = require("../models/CompanyCertification");
 const SystemSetting = require("../models/SystemSetting");
 const { escapeRegex } = require("../utils/regex");
 const {
@@ -468,4 +469,195 @@ exports.getPublicSettings = async (req, res, next) => {
     res.json({ success: true, data: map });
   } catch (err) { next(err); }
 };
+
+/**
+ * 📜 Institutional & Company Certifications (/about/certifications)
+ */
+exports.getCompanyCertifications = async (req, res, next) => {
+  try {
+    const [certifications, heroSetting] = await Promise.all([
+      CompanyCertification.find({ isActive: true })
+        .sort({ order: 1, createdAt: -1 })
+        .lean(),
+      SystemSetting.findOne({ key: "about_certifications_hero" }).lean(),
+    ]);
+
+    res.json({
+      success: true,
+      count: certifications.length,
+      data: certifications,
+      hero: heroSetting?.value || null,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.adminGetCompanyCertifications = async (req, res, next) => {
+  try {
+    const { category, isActive, search } = req.query;
+    const filter = {};
+
+    if (category && category !== "all") {
+      filter.category = category;
+    }
+    if (isActive !== undefined && isActive !== "all") {
+      filter.isActive = isActive === "true";
+    }
+    if (search && search.trim()) {
+      const regex = new RegExp(escapeRegex(search.trim()), "i");
+      filter.$or = [
+        { title: regex },
+        { issuer: regex },
+        { category: regex },
+        { credentialId: regex },
+        { description: regex },
+      ];
+    }
+
+    const certifications = await CompanyCertification.find(filter)
+      .sort({ order: 1, createdAt: -1 })
+      .lean();
+
+    res.json({
+      success: true,
+      count: certifications.length,
+      data: certifications,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.createCompanyCertification = async (req, res, next) => {
+  try {
+    const {
+      title,
+      issuer,
+      category,
+      credentialId,
+      issueDate,
+      expiryDate,
+      description,
+      image,
+      verificationUrl,
+      highlights,
+      order,
+      isActive,
+      isFeatured,
+    } = req.body;
+
+    if (!title || !issuer || !image) {
+      return res.status(400).json({
+        success: false,
+        message: "Title, issuer, and certificate image are required.",
+      });
+    }
+
+    const count = await CompanyCertification.countDocuments();
+
+    const certification = await CompanyCertification.create({
+      title: title.trim(),
+      issuer: issuer.trim(),
+      category: (category || "Accreditation").trim(),
+      credentialId: (credentialId || "").trim(),
+      issueDate: (issueDate || "").trim(),
+      expiryDate: (expiryDate || "").trim(),
+      description: (description || "").trim(),
+      image: image.trim(),
+      verificationUrl: (verificationUrl || "").trim(),
+      highlights: Array.isArray(highlights) ? highlights : [],
+      order: order !== undefined ? Number(order) : count,
+      isActive: isActive !== undefined ? Boolean(isActive) : true,
+      isFeatured: Boolean(isFeatured),
+    });
+
+    res.status(201).json({
+      success: true,
+      data: certification,
+      message: "Certification added successfully.",
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.updateCompanyCertification = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const updateData = { ...req.body };
+    delete updateData._id;
+    delete updateData.__v;
+
+    const certification = await CompanyCertification.findByIdAndUpdate(
+      id,
+      updateData,
+      { new: true, runValidators: true }
+    );
+
+    if (!certification) {
+      return res.status(404).json({
+        success: false,
+        message: "Certification not found.",
+      });
+    }
+
+    res.json({
+      success: true,
+      data: certification,
+      message: "Certification updated successfully.",
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.deleteCompanyCertification = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const certification = await CompanyCertification.findByIdAndDelete(id);
+
+    if (!certification) {
+      return res.status(404).json({
+        success: false,
+        message: "Certification not found.",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Certification "${certification.title}" removed successfully.`,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.toggleCompanyCertificationStatus = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const certification = await CompanyCertification.findById(id);
+
+    if (!certification) {
+      return res.status(404).json({
+        success: false,
+        message: "Certification not found.",
+      });
+    }
+
+    certification.isActive = !certification.isActive;
+    await certification.save();
+
+    res.json({
+      success: true,
+      data: certification,
+      message: `Certification "${certification.title}" is now ${
+        certification.isActive ? "Active" : "Paused"
+      }.`,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 
