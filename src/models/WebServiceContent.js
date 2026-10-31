@@ -49,11 +49,7 @@ const WebServiceContentSchema = new mongoose.Schema(
           color: String,
           shadow: String,
         }],
-        phases: [{
-          id: String,
-          t: String,
-          d: String,
-        }],
+        phases: [mongoose.Schema.Types.Mixed],
         verticals: [{
           title: String,
           desc: String,
@@ -62,18 +58,21 @@ const WebServiceContentSchema = new mongoose.Schema(
           border: String,
         }],
         integrations: [mongoose.Schema.Types.Mixed], 
-        pricing: [{
-          t: String,
-          p: String,
-          list: [String],
-          color: String,
-          highlight: Boolean,
-        }],
+        pricing: [mongoose.Schema.Types.Mixed],
+        plans: [mongoose.Schema.Types.Mixed],
         metrics: [mongoose.Schema.Types.Mixed], // New for marketing pages
         pillars: [mongoose.Schema.Types.Mixed], // Added alias support
+        deliverables: [mongoose.Schema.Types.Mixed],
+        faqs: [mongoose.Schema.Types.Mixed],
+        anatomy: mongoose.Schema.Types.Mixed,
+        workbench: mongoose.Schema.Types.Mixed,
       },
       cta: {
+        badge: String,
         title: String,
+        subtitle: String,
+        description: String,
+        buttonText: String,
       }
     },
     // Details Page Content
