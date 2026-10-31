@@ -11,6 +11,7 @@ const slugify = require('slugify');
 const emailService = require('../../services/email.service');
 const { parseLocation } = require('../../utils/geoPoint');
 const { clearCourseCache } = require('../course.controller');
+const { invalidatePublicBranchesCache } = require('../branch.controller');
 const { runWithTransaction } = require('../../utils/transaction');
 const BRANCHES_DETAILS_CACHE_TTL = 30 * 1000; // 30 seconds
 let branchesDetailsCache = null;
@@ -194,6 +195,7 @@ exports.onboardBranch = async (req, res, next) => {
     }
 
     branchesDetailsCache = null;
+    invalidatePublicBranchesCache(); // ✅ new branch visible on public page immediately
 
     res.status(201).json({
       success: true,
@@ -266,6 +268,7 @@ exports.updateBranch = async (req, res, next) => {
     await AuditLog.create({ actor: req.user._id, action: 'UPDATE_BRANCH', entity: 'Branch', entityId: branch._id, details: { name: branch.name } });
 
     branchesDetailsCache = null;
+    invalidatePublicBranchesCache(); // ✅ flush public /branches/public/all cache
 
     res.json({ success: true, data: branch });
   } catch (err) { next(err); }
@@ -346,6 +349,7 @@ exports.deleteBranch = async (req, res, next) => {
     });
 
     branchesDetailsCache = null;
+    invalidatePublicBranchesCache(); // ✅ deleted branch removed from public page immediately
 
     res.json({ success: true, message: `Branch "${branchName}" permanently deleted.` });
   } catch (err) { next(err); }
