@@ -37,10 +37,26 @@ const CompanyCertificationSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
+    courseName: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    duration: {
+      type: String,
+      trim: true,
+      default: "6 Months (240+ Hours)",
+    },
+    skills: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
     image: {
       type: String,
-      required: [true, "Certificate image is required"],
       trim: true,
+      default: "",
     },
     verificationUrl: {
       type: String,
@@ -74,3 +90,4 @@ module.exports = mongoose.model(
   "CompanyCertification",
   CompanyCertificationSchema
 );
+

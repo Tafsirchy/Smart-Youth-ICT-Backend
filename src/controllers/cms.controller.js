@@ -534,6 +534,9 @@ exports.createCompanyCertification = async (req, res, next) => {
     const {
       title,
       issuer,
+      courseName,
+      duration,
+      skills,
       category,
       credentialId,
       issueDate,
@@ -547,10 +550,10 @@ exports.createCompanyCertification = async (req, res, next) => {
       isFeatured,
     } = req.body;
 
-    if (!title || !issuer || !image) {
+    if (!title || !issuer) {
       return res.status(400).json({
         success: false,
-        message: "Title, issuer, and certificate image are required.",
+        message: "Title and issuer are required.",
       });
     }
 
@@ -559,12 +562,15 @@ exports.createCompanyCertification = async (req, res, next) => {
     const certification = await CompanyCertification.create({
       title: title.trim(),
       issuer: issuer.trim(),
-      category: (category || "Accreditation").trim(),
+      courseName: (courseName || "").trim(),
+      duration: (duration || "6 Months (240+ Hours)").trim(),
+      skills: Array.isArray(skills) ? skills : [],
+      category: (category || "Certified Course").trim(),
       credentialId: (credentialId || "").trim(),
       issueDate: (issueDate || "").trim(),
-      expiryDate: (expiryDate || "").trim(),
+      expiryDate: (expiryDate || "Lifetime Validity").trim(),
       description: (description || "").trim(),
-      image: image.trim(),
+      image: (image || "").trim(),
       verificationUrl: (verificationUrl || "").trim(),
       highlights: Array.isArray(highlights) ? highlights : [],
       order: order !== undefined ? Number(order) : count,
