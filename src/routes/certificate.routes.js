@@ -1,10 +1,11 @@
-const express = require('express');
+﻿const express = require('express');
 const { protect } = require('../middleware/auth.middleware');
 const { authorize } = require('../middleware/role.middleware');
 const {
   getCertificate,
   downloadCertificate,
-  verifyCertificate
+  verifyCertificate,
+  getMyCertificates
 } = require('../controllers/certificate.controller');
 
 const router = express.Router();
@@ -14,6 +15,7 @@ router.get('/verify/:credentialId', verifyCertificate);
 
 // Protected routes
 router.use(protect);
+router.get('/', authorize('student'), getMyCertificates);
 router.get('/course/:courseId', authorize('student'), getCertificate);
 router.get('/:id/download', downloadCertificate);
 

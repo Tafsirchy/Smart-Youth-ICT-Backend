@@ -1,4 +1,4 @@
-const crypto = require('crypto');
+﻿const crypto = require('crypto');
 const Certificate = require('../models/Certificate');
 const Course = require('../models/Course');
 const Progress = require('../models/Progress');
@@ -94,6 +94,22 @@ exports.verifyCertificate = async (req, res, next) => {
     if (!certificate) return res.status(404).json({ success: false, message: 'Invalid or fake certificate ID' });
 
     res.json({ success: true, data: certificate });
+  } catch (err) {
+    next(err);
+  }
+};
+
+
+// @desc    Get all certificates of the logged in student
+// @route   GET /api/certificates
+// @access  Private
+exports.getMyCertificates = async (req, res, next) => {
+  try {
+    const certificates = await Certificate.find({ student: req.user._id })
+      .populate('course', 'title thumbnail duration')
+      .sort({ createdAt: -1 });
+
+    res.json({ success: true, data: certificates });
   } catch (err) {
     next(err);
   }
