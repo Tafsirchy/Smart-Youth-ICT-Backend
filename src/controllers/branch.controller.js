@@ -43,7 +43,7 @@ const LeadCRM = require('../models/LeadCRM');
 // @access  Public
 exports.getPublicBranches = async (req, res, next) => {
   try {
-    res.set('Cache-Control', 'public, max-age=600, s-maxage=1800');
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
     const branches = await Branch.find({ isActive: true }).select('name code slug division').sort('name');
     res.json({ success: true, data: branches });
   } catch (err) { next(err); }
@@ -51,7 +51,7 @@ exports.getPublicBranches = async (req, res, next) => {
 
 let publicBranchesCache = null;
 let lastBranchesCacheTime = 0;
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL_MS = 10 * 1000; // 10 seconds short burst buffer (auto-invalidated on update)
 
 exports.invalidatePublicBranchesCache = () => {
   publicBranchesCache = null;
@@ -63,9 +63,10 @@ exports.invalidatePublicBranchesCache = () => {
 // @access  Public
 exports.getPublicBranchesDetailed = async (req, res, next) => {
   try {
-    res.set('Cache-Control', 'public, max-age=600, s-maxage=1800');
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
 
-    if (publicBranchesCache && (Date.now() - lastBranchesCacheTime < CACHE_TTL_MS)) {
+    const forceRefresh = req.query.refresh === 'true' || req.query.t;
+    if (!forceRefresh && publicBranchesCache && (Date.now() - lastBranchesCacheTime < CACHE_TTL_MS)) {
       return res.json(publicBranchesCache);
     }
 
