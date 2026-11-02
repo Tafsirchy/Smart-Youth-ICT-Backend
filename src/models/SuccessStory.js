@@ -16,11 +16,13 @@ const SuccessStorySchema = new mongoose.Schema(
     videoThumbnail: { type: String, trim: true },
     resultSummary: { type: String, required: true, trim: true }, // e.g. "Earned $1200 on Fiverr"
     description: { type: String, trim: true },
-    proofImage: { type: String, default: "" },
+    proofImage: { type: String, default: "", select: false },
     isPublished: { type: Boolean, default: false, index: true },
     order: { type: Number, default: 0 },
   },
   { timestamps: true }
 );
+
+SuccessStorySchema.index({ isPublished: 1, order: 1, createdAt: -1 });
 
 module.exports = mongoose.model("SuccessStory", SuccessStorySchema);

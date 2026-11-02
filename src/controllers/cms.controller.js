@@ -62,14 +62,23 @@ exports.deleteTeamMember = async (req, res, next) => {
  */
 exports.getSuccessStories = async (req, res, next) => {
   try {
-    const stories = await SuccessStory.find({ isPublished: true }).populate("courseId", "title").sort("order -createdAt");
+    const stories = await SuccessStory.find({ isPublished: true })
+      .select("-proofImage")
+      .populate("courseId", "title")
+      .sort("order -createdAt")
+      .lean();
+    res.set("Cache-Control", "public, max-age=120, s-maxage=300");
     res.json({ success: true, count: stories.length, data: stories });
   } catch (err) { next(err); }
 };
 
 exports.adminGetSuccessStories = async (req, res, next) => {
   try {
-    const stories = await SuccessStory.find().populate("courseId", "title").sort("-createdAt");
+    const stories = await SuccessStory.find()
+      .select("-proofImage")
+      .populate("courseId", "title")
+      .sort("-createdAt")
+      .lean();
     res.json({ success: true, data: stories });
   } catch (err) { next(err); }
 };
