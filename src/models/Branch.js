@@ -13,7 +13,7 @@ const BranchSchema = new mongoose.Schema(
     division: { 
       type: String, 
       trim: true, 
-      enum: ['Dhaka', 'Chittagong', 'Rajshahi', 'Khulna', 'Barisal', 'Sylhet', 'Rangpur', 'Mymensingh', 'Other'],
+      enum: ['Dhaka', 'Chittagong', 'Chattogram', 'Rajshahi', 'Khulna', 'Barisal', 'Barishal', 'Sylhet', 'Rangpur', 'Mymensingh', 'Other'],
       default: 'Dhaka' 
     },
     establishedDate: { type: Date },
