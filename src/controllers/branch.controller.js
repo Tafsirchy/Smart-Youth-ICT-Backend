@@ -43,15 +43,15 @@ const LeadCRM = require('../models/LeadCRM');
 // @access  Public
 exports.getPublicBranches = async (req, res, next) => {
   try {
-    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-    const branches = await Branch.find({ isActive: true }).select('name code slug division').sort('name');
+    res.set('Cache-Control', 'public, max-age=120, s-maxage=300, stale-while-revalidate=86400');
+    const branches = await Branch.find({ isActive: true }).select('name code slug division').sort('name').lean();
     res.json({ success: true, data: branches });
   } catch (err) { next(err); }
 };
 
 let publicBranchesCache = null;
 let lastBranchesCacheTime = 0;
-const CACHE_TTL_MS = 10 * 1000; // 10 seconds short burst buffer (auto-invalidated on update)
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache buffer (auto-invalidated on admin updates)
 
 exports.invalidatePublicBranchesCache = () => {
   publicBranchesCache = null;
@@ -62,10 +62,14 @@ exports.invalidatePublicBranchesCache = () => {
 // @route   GET /api/branches/public/all
 // @access  Public
 exports.getPublicBranchesDetailed = async (req, res, next) => {
+  const forceRefresh = req.query.refresh === 'true' || req.query.t;
   try {
-    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    if (forceRefresh) {
+      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    } else {
+      res.set('Cache-Control', 'public, max-age=120, s-maxage=300, stale-while-revalidate=86400');
+    }
 
-    const forceRefresh = req.query.refresh === 'true' || req.query.t;
     if (!forceRefresh && publicBranchesCache && (Date.now() - lastBranchesCacheTime < CACHE_TTL_MS)) {
       return res.json(publicBranchesCache);
     }
@@ -80,7 +84,14 @@ exports.getPublicBranchesDetailed = async (req, res, next) => {
     lastBranchesCacheTime = Date.now();
 
     res.json(responsePayload);
-  } catch (err) { next(err); }
+  } catch (err) {
+    // If DB is temporarily unavailable (e.g. Atlas reconnection / cold start), serve cached data if available
+    if (publicBranchesCache) {
+      console.warn('[Branch API] MongoDB query error, fallback to memory cache:', err.message);
+      return res.json(publicBranchesCache);
+    }
+    next(err);
+  }
 };
 
 // @desc    Get single branch public details with available courses
