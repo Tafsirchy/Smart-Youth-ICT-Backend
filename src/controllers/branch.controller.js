@@ -75,7 +75,7 @@ exports.getPublicBranchesDetailed = async (req, res, next) => {
     }
 
     const branches = await Branch.find({ isActive: true })
-      .select('name code slug type division address contact location officeHours facilities coverImage gallery logo website whatsapp notice isActive')
+      .select('name code slug type division sponsorId bio seatCapacity areaSqFt totalEmployees establishedDate address contact location officeHours facilities coverImage gallery logo website whatsapp notice isActive')
       .sort({ type: 1, name: 1 })
       .lean();
 

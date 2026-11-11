@@ -111,7 +111,8 @@ exports.getAllBranchesDetails = async (req, res, next) => {
 exports.onboardBranch = async (req, res, next) => {
   try {
     const { 
-      name, code, type, division, establishedDate, logo, coverImage, gallery, facilities, website,
+      name, code, type, division, establishedDate, sponsorId, bio, seatCapacity, areaSqFt, totalEmployees,
+      logo, coverImage, gallery, facilities, website,
       address, location, contact, whatsapp, notice, officeHours,
       adminName, adminEmail, adminPassword 
     } = req.body;
@@ -164,6 +165,11 @@ exports.onboardBranch = async (req, res, next) => {
       type, 
       division: division || 'Dhaka',
       establishedDate, 
+      sponsorId: sponsorId ? String(sponsorId).trim() : '',
+      bio: bio ? String(bio).trim() : '',
+      seatCapacity: Math.max(0, Number(seatCapacity) || 0),
+      areaSqFt: Math.max(0, Number(areaSqFt) || 0),
+      totalEmployees: Math.max(0, Number(totalEmployees) || 0),
       logo, 
       coverImage,
       gallery: Array.isArray(gallery) ? gallery : [],
@@ -252,10 +258,31 @@ exports.updateBranch = async (req, res, next) => {
       if (parsedLocation.point) {
         updateData.location = parsedLocation.point;
       } else {
-        // Coordinates were cleared â†’ remove the field entirely so the 2dsphere
+        // Coordinates were cleared → remove the field entirely so the 2dsphere
         // index never sees an empty Point.
         delete updateData.location;
         unset.location = 1;
+      }
+    }
+
+    ['seatCapacity', 'areaSqFt', 'totalEmployees'].forEach((numKey) => {
+      if (numKey in updateData) {
+        updateData[numKey] = Math.max(0, Number(updateData[numKey]) || 0);
+      }
+    });
+
+    if (updateData.address && typeof updateData.address === 'object') {
+      const addr = updateData.address;
+      if (!addr.division && updateData.division) {
+        addr.division = updateData.division;
+      }
+      if (!addr.city && addr.district) {
+        addr.city = addr.district;
+      }
+      if (!addr.street && (addr.houseNo || addr.roadNo)) {
+        addr.street = [addr.houseNo ? `House ${addr.houseNo}` : '', addr.roadNo ? `Road ${addr.roadNo}` : '']
+          .filter(Boolean)
+          .join(', ');
       }
     }
 
