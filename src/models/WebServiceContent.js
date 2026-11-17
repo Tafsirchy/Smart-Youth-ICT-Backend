@@ -7,7 +7,6 @@ const WebServiceContentSchema = new mongoose.Schema(
       required: true,
       unique: true,
       enum: [
-        "portfolio-websites", 
         "business-websites", 
         "ecommerce", 
         "custom-apps", 
