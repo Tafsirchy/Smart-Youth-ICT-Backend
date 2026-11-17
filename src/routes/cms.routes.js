@@ -8,11 +8,6 @@ const {
   getMemberships, createMembership, updateMembership, deleteMembership,
   getMentors, createMentor, updateMentor, deleteMentor, toggleFeaturedMentor,
   getTestimonials, updateTestimonialStatus, createTestimonial, updateTestimonial, deleteTestimonial,
-  getServicePageContent, updateServicePageContent,
-  getCareerTracks, createCareerTrack, updateCareerTrack, deleteCareerTrack,
-  getCertificationPrograms, createCertificationProgram, updateCertificationProgram, deleteCertificationProgram,
-  getFreelancingPrograms, createFreelancingProgram, updateFreelancingProgram, deleteFreelancingProgram,
-  getJobPlacements, createJobPlacement, updateJobPlacement, deleteJobPlacement,
   getWebServiceContent, updateWebServiceContent,
   getSettingByKey, getPublicSettings,
   getCompanyCertifications, adminGetCompanyCertifications,
@@ -32,11 +27,6 @@ router.get("/memberships", getMemberships);
 router.get("/certifications", getCompanyCertifications);
 router.get("/about-certifications", getCompanyCertifications);
 router.get("/mentors", getMentors);
-router.get("/services/content/:pageType", getServicePageContent);
-router.get("/services/career-tracks", getCareerTracks);
-router.get("/services/certifications", getCertificationPrograms);
-router.get("/services/freelancing", getFreelancingPrograms);
-router.get("/services/job-placements", getJobPlacements);
 router.get("/services/web-software/:pageType", getWebServiceContent);
 router.get("/services/creative-marketing/:pageType", getWebServiceContent);
 router.get("/services/content-seo/:pageType", getWebServiceContent);
@@ -89,25 +79,6 @@ router.post("/testimonials", createTestimonial);
 router.put("/testimonials/:id", updateTestimonial);
 router.delete("/testimonials/:id", deleteTestimonial);
 router.patch("/testimonials/:id/status", updateTestimonialStatus);
-
-// 🎓 Career Services (Admin Only)
-router.put("/services/content/:pageType", updateServicePageContent);
-
-router.post("/services/career-tracks", createCareerTrack);
-router.put("/services/career-tracks/:id", updateCareerTrack);
-router.delete("/services/career-tracks/:id", deleteCareerTrack);
-
-router.post("/services/certifications", createCertificationProgram);
-router.put("/services/certifications/:id", updateCertificationProgram);
-router.delete("/services/certifications/:id", deleteCertificationProgram);
-
-router.post("/services/freelancing", createFreelancingProgram);
-router.put("/services/freelancing/:id", updateFreelancingProgram);
-router.delete("/services/freelancing/:id", deleteFreelancingProgram);
-
-router.post("/services/job-placements", createJobPlacement);
-router.put("/services/job-placements/:id", updateJobPlacement);
-router.delete("/services/job-placements/:id", deleteJobPlacement);
 
 // 💻 Web & Software Services
 router.put("/services/web-software/:pageType", updateWebServiceContent);
