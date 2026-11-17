@@ -11,6 +11,8 @@ const JobPlacement = require("../models/JobPlacement");
 const ServicePageContent = require("../models/ServicePageContent");
 const WebServiceContent = require("../models/WebServiceContent");
 const CompanyCertification = require("../models/CompanyCertification");
+const HomeERP = require("../models/HomeERP");
+const HomeTechStack = require("../models/HomeTechStack");
 const SystemSetting = require("../models/SystemSetting");
 const { escapeRegex } = require("../utils/regex");
 const {
@@ -674,5 +676,233 @@ exports.toggleCompanyCertificationStatus = async (req, res, next) => {
     next(err);
   }
 };
+
+/**
+ * 🏢 Homepage ERP Software Showcase Controllers
+ */
+exports.getHomeERPs = async (req, res, next) => {
+  try {
+    const items = await HomeERP.find({ isActive: true })
+      .sort({ order: 1, createdAt: -1 })
+      .lean();
+    res.json({ success: true, count: items.length, data: items });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.adminGetHomeERPs = async (req, res, next) => {
+  try {
+    const items = await HomeERP.find({})
+      .sort({ order: 1, createdAt: -1 })
+      .lean();
+    res.json({ success: true, count: items.length, data: items });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.createHomeERP = async (req, res, next) => {
+  try {
+    const { title, category, description, icon, tag, badgeColor, demoUrl, order, isActive } = req.body;
+
+    if (!title || typeof title !== "string" || !title.trim()) {
+      return res.status(400).json({ success: false, message: "Title is required and must be valid text" });
+    }
+
+    const item = await HomeERP.create({
+      title: title.trim(),
+      category: (category || "Enterprise Software").trim(),
+      description: (description || "").trim(),
+      icon: (icon || "Layers").trim(),
+      tag: (tag || "Ready to Deploy").trim(),
+      badgeColor: (badgeColor || "emerald").trim(),
+      demoUrl: (demoUrl || "/contact?service=erp").trim(),
+      order: Number.isFinite(Number(order)) ? Math.max(0, Number(order)) : 0,
+      isActive: isActive !== undefined ? Boolean(isActive) : true
+    });
+
+    res.status(201).json({ success: true, data: item, message: `ERP "${item.title}" created successfully` });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.updateHomeERP = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { title, category, description, icon, tag, badgeColor, demoUrl, order, isActive } = req.body;
+
+    const updateData = {};
+    if (title !== undefined) {
+      if (!title || typeof title !== "string" || !title.trim()) {
+        return res.status(400).json({ success: false, message: "Title cannot be empty" });
+      }
+      updateData.title = title.trim();
+    }
+    if (category !== undefined) updateData.category = category.trim();
+    if (description !== undefined) updateData.description = description.trim();
+    if (icon !== undefined) updateData.icon = icon.trim();
+    if (tag !== undefined) updateData.tag = tag.trim();
+    if (badgeColor !== undefined) updateData.badgeColor = badgeColor.trim();
+    if (demoUrl !== undefined) updateData.demoUrl = demoUrl.trim();
+    if (order !== undefined) updateData.order = Math.max(0, Number(order) || 0);
+    if (isActive !== undefined) updateData.isActive = Boolean(isActive);
+
+    const item = await HomeERP.findByIdAndUpdate(id, updateData, { new: true, runValidators: true });
+    if (!item) {
+      return res.status(404).json({ success: false, message: "ERP software not found" });
+    }
+
+    res.json({ success: true, data: item, message: `ERP "${item.title}" updated successfully` });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.deleteHomeERP = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const item = await HomeERP.findByIdAndDelete(id);
+    if (!item) {
+      return res.status(404).json({ success: false, message: "ERP software not found" });
+    }
+    res.json({ success: true, message: `ERP "${item.title}" removed successfully` });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.toggleHomeERPStatus = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const item = await HomeERP.findById(id);
+    if (!item) {
+      return res.status(404).json({ success: false, message: "ERP software not found" });
+    }
+    item.isActive = !item.isActive;
+    await item.save();
+    res.json({ success: true, data: item, message: `ERP "${item.title}" is now ${item.isActive ? "Active" : "Paused"}` });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * 💻 Homepage Tech Stack & Languages Showcase Controllers
+ */
+exports.getHomeTechStacks = async (req, res, next) => {
+  try {
+    const items = await HomeTechStack.find({ isActive: true })
+      .sort({ order: 1, createdAt: -1 })
+      .lean();
+    res.json({ success: true, count: items.length, data: items });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.adminGetHomeTechStacks = async (req, res, next) => {
+  try {
+    const items = await HomeTechStack.find({})
+      .sort({ order: 1, createdAt: -1 })
+      .lean();
+    res.json({ success: true, count: items.length, data: items });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.createHomeTechStack = async (req, res, next) => {
+  try {
+    const { name, category, badge, icon, color, order, isActive } = req.body;
+
+    if (!name || typeof name !== "string" || !name.trim()) {
+      return res.status(400).json({ success: false, message: "Technology name is required" });
+    }
+
+    const validCategories = ["language", "markup", "framework", "database", "devops_cloud"];
+    const chosenCategory = category && validCategories.includes(category) ? category : "language";
+
+    const item = await HomeTechStack.create({
+      name: name.trim(),
+      category: chosenCategory,
+      badge: (badge || "Core").trim(),
+      icon: (icon || "").trim(),
+      color: (color || "#10B981").trim(),
+      order: Number.isFinite(Number(order)) ? Math.max(0, Number(order)) : 0,
+      isActive: isActive !== undefined ? Boolean(isActive) : true
+    });
+
+    res.status(201).json({ success: true, data: item, message: `Technology "${item.name}" created successfully` });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.updateHomeTechStack = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { name, category, badge, icon, color, order, isActive } = req.body;
+
+    const updateData = {};
+    if (name !== undefined) {
+      if (!name || typeof name !== "string" || !name.trim()) {
+        return res.status(400).json({ success: false, message: "Name cannot be empty" });
+      }
+      updateData.name = name.trim();
+    }
+    if (category !== undefined) {
+      const validCategories = ["language", "markup", "framework", "database", "devops_cloud"];
+      if (!validCategories.includes(category)) {
+        return res.status(400).json({ success: false, message: `Category must be one of: ${validCategories.join(", ")}` });
+      }
+      updateData.category = category;
+    }
+    if (badge !== undefined) updateData.badge = badge.trim();
+    if (icon !== undefined) updateData.icon = icon.trim();
+    if (color !== undefined) updateData.color = color.trim();
+    if (order !== undefined) updateData.order = Math.max(0, Number(order) || 0);
+    if (isActive !== undefined) updateData.isActive = Boolean(isActive);
+
+    const item = await HomeTechStack.findByIdAndUpdate(id, updateData, { new: true, runValidators: true });
+    if (!item) {
+      return res.status(404).json({ success: false, message: "Technology not found" });
+    }
+
+    res.json({ success: true, data: item, message: `Technology "${item.name}" updated successfully` });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.deleteHomeTechStack = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const item = await HomeTechStack.findByIdAndDelete(id);
+    if (!item) {
+      return res.status(404).json({ success: false, message: "Technology not found" });
+    }
+    res.json({ success: true, message: `Technology "${item.name}" removed successfully` });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.toggleHomeTechStackStatus = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const item = await HomeTechStack.findById(id);
+    if (!item) {
+      return res.status(404).json({ success: false, message: "Technology not found" });
+    }
+    item.isActive = !item.isActive;
+    await item.save();
+    res.json({ success: true, data: item, message: `Technology "${item.name}" is now ${item.isActive ? "Active" : "Paused"}` });
+  } catch (err) {
+    next(err);
+  }
+};
+
 
 

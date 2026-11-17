@@ -12,7 +12,9 @@ const {
   getSettingByKey, getPublicSettings,
   getCompanyCertifications, adminGetCompanyCertifications,
   createCompanyCertification, updateCompanyCertification,
-  deleteCompanyCertification, toggleCompanyCertificationStatus
+  deleteCompanyCertification, toggleCompanyCertificationStatus,
+  getHomeERPs, adminGetHomeERPs, createHomeERP, updateHomeERP, deleteHomeERP, toggleHomeERPStatus,
+  getHomeTechStacks, adminGetHomeTechStacks, createHomeTechStack, updateHomeTechStack, deleteHomeTechStack, toggleHomeTechStackStatus
 } = require("../controllers/cms.controller");
 
 const router = express.Router();
@@ -27,6 +29,8 @@ router.get("/memberships", getMemberships);
 router.get("/certifications", getCompanyCertifications);
 router.get("/about-certifications", getCompanyCertifications);
 router.get("/mentors", getMentors);
+router.get("/home-erp", getHomeERPs);
+router.get("/home-tech", getHomeTechStacks);
 router.get("/services/web-software/:pageType", getWebServiceContent);
 router.get("/services/creative-marketing/:pageType", getWebServiceContent);
 router.get("/services/content-seo/:pageType", getWebServiceContent);
@@ -85,5 +89,19 @@ router.put("/services/web-software/:pageType", updateWebServiceContent);
 router.put("/services/creative-marketing/:pageType", updateWebServiceContent);
 router.put("/services/content-seo/:pageType", updateWebServiceContent);
 router.put("/services/ai-managed/:pageType", updateWebServiceContent);
+
+// 🏢 Home ERP Showcase (Admin)
+router.get("/home-erp/admin", adminGetHomeERPs);
+router.post("/home-erp", createHomeERP);
+router.put("/home-erp/:id", updateHomeERP);
+router.delete("/home-erp/:id", deleteHomeERP);
+router.patch("/home-erp/:id/toggle", toggleHomeERPStatus);
+
+// 💻 Home Tech Stack & Languages Showcase (Admin)
+router.get("/home-tech/admin", adminGetHomeTechStacks);
+router.post("/home-tech", createHomeTechStack);
+router.put("/home-tech/:id", updateHomeTechStack);
+router.delete("/home-tech/:id", deleteHomeTechStack);
+router.patch("/home-tech/:id/toggle", toggleHomeTechStackStatus);
 
 module.exports = router;
