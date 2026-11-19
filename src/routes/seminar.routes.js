@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const upload = require('../middleware/upload.middleware');
 const { protect } = require('../middleware/auth.middleware');
 const { requireAccess } = require('../middleware/rbac.middleware');
 const { PERMISSIONS } = require('../config/permissions');
@@ -12,6 +13,7 @@ const {
   registerForSeminar,
   getAllRegistrations,
   markAttended,
+  uploadSeminarImage,
 } = require('../controllers/seminar.controller');
 
 // Public — list seminars (can filter by branchId) and register
@@ -20,6 +22,7 @@ router.post('/register', registerForSeminar);
 router.get('/details/:id', getSeminarById);
 
 // Admin / Staff — manage branch seminars
+router.post('/upload-image', protect, requireAccess(PERMISSIONS.SEMINARS_MANAGE), upload.single('image'), uploadSeminarImage);
 router.post('/', protect, requireAccess(PERMISSIONS.SEMINARS_MANAGE), createSeminar);
 router.patch('/:id', protect, requireAccess(PERMISSIONS.SEMINARS_MANAGE), updateSeminar);
 router.delete('/:id', protect, requireAccess(PERMISSIONS.SEMINARS_MANAGE), deleteSeminar);
