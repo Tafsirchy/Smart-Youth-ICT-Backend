@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Seminar = require('../models/Seminar');
 const SeminarRegistration = require('../models/SeminarRegistration');
 const emailService = require('../services/email.service');
+const { uploadToImageBB } = require('../services/imagebb.service');
 const {
   isBranchAuthorized,
   resolveBranchScope,
@@ -326,5 +327,24 @@ exports.markAttended = async (req, res, next) => {
 
     await reg.save();
     res.json({ success: true, data: reg });
+  } catch (err) { next(err); }
+};
+
+// @desc    Upload seminar banner or speaker avatar
+// @route   POST /api/seminars/upload-image
+// @access  Private (seminars:manage)
+exports.uploadSeminarImage = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No image file provided' });
+    }
+    let url;
+    try {
+      url = await uploadToImageBB(req.file.buffer);
+    } catch (imgbbErr) {
+      const mime = req.file.mimetype || 'image/jpeg';
+      url = `data:${mime};base64,${req.file.buffer.toString('base64')}`;
+    }
+    res.json({ success: true, data: { url } });
   } catch (err) { next(err); }
 };
