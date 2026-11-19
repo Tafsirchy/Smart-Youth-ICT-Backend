@@ -9,12 +9,13 @@ const {
   getMentors, createMentor, updateMentor, deleteMentor, toggleFeaturedMentor,
   getTestimonials, updateTestimonialStatus, createTestimonial, updateTestimonial, deleteTestimonial,
   getWebServiceContent, updateWebServiceContent,
-  getSettingByKey, getPublicSettings,
+  getSettingByKey, getPublicSettings, updateSetting,
   getCompanyCertifications, adminGetCompanyCertifications,
   createCompanyCertification, updateCompanyCertification,
   deleteCompanyCertification, toggleCompanyCertificationStatus,
   getHomeERPs, adminGetHomeERPs, createHomeERP, updateHomeERP, deleteHomeERP, toggleHomeERPStatus,
-  getHomeTechStacks, adminGetHomeTechStacks, createHomeTechStack, updateHomeTechStack, deleteHomeTechStack, toggleHomeTechStackStatus
+  getHomeTechStacks, adminGetHomeTechStacks, createHomeTechStack, updateHomeTechStack, deleteHomeTechStack, toggleHomeTechStackStatus,
+  getHomeBrands, adminGetHomeBrands, createHomeBrand, updateHomeBrand, deleteHomeBrand, toggleHomeBrandStatus
 } = require("../controllers/cms.controller");
 
 const router = express.Router();
@@ -31,6 +32,7 @@ router.get("/about-certifications", getCompanyCertifications);
 router.get("/mentors", getMentors);
 router.get("/home-erp", getHomeERPs);
 router.get("/home-tech", getHomeTechStacks);
+router.get("/home-brands", getHomeBrands);
 router.get("/services/web-software/:pageType", getWebServiceContent);
 router.get("/services/creative-marketing/:pageType", getWebServiceContent);
 router.get("/services/content-seo/:pageType", getWebServiceContent);
@@ -103,5 +105,15 @@ router.post("/home-tech", createHomeTechStack);
 router.put("/home-tech/:id", updateHomeTechStack);
 router.delete("/home-tech/:id", deleteHomeTechStack);
 router.patch("/home-tech/:id/toggle", toggleHomeTechStackStatus);
+
+// 🌐 Trusted Brands & Logo Cloud (Admin)
+router.get("/home-brands/admin", adminGetHomeBrands);
+router.post("/home-brands", createHomeBrand);
+router.put("/home-brands/:id", updateHomeBrand);
+router.delete("/home-brands/:id", deleteHomeBrand);
+router.patch("/home-brands/:id/toggle", toggleHomeBrandStatus);
+
+// ⚙️ System Settings (Admin write)
+router.patch("/settings/:key", updateSetting);
 
 module.exports = router;
