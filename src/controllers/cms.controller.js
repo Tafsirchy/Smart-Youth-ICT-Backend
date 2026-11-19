@@ -13,6 +13,7 @@ const WebServiceContent = require("../models/WebServiceContent");
 const CompanyCertification = require("../models/CompanyCertification");
 const HomeERP = require("../models/HomeERP");
 const HomeTechStack = require("../models/HomeTechStack");
+const HomeBrand = require("../models/HomeBrand");
 const SystemSetting = require("../models/SystemSetting");
 const { escapeRegex } = require("../utils/regex");
 const {
@@ -904,5 +905,153 @@ exports.toggleHomeTechStackStatus = async (req, res, next) => {
   }
 };
 
+/**
+ * 🌟 Trusted Brands & Logo Cloud Controllers
+ */
+const DEFAULT_INITIAL_BRANDS = [
+  { name: "Google", icon: "google", category: "Tech Giant", order: 1, isActive: true },
+  { name: "Microsoft", icon: "microsoft", category: "Tech Giant", order: 2, isActive: true },
+  { name: "Amazon", icon: "amazon", category: "Cloud & E-Commerce", order: 3, isActive: true },
+  { name: "Meta", icon: "meta", category: "Social & AI Tech", order: 4, isActive: true },
+  { name: "Shopify", icon: "shopify", category: "E-Commerce Platform", order: 5, isActive: true },
+  { name: "Canva", icon: "canva", category: "Creative & Design", order: 6, isActive: true },
+  { name: "Upwork", icon: "upwork", category: "Freelance Marketplace", order: 7, isActive: true },
+  { name: "Fiverr", icon: "fiverr", category: "Freelance Marketplace", order: 8, isActive: true },
+  { name: "Notion", icon: "notion", category: "Productivity SaaS", order: 9, isActive: true },
+  { name: "HubSpot", icon: "hubspot", category: "CRM & Marketing", order: 10, isActive: true },
+];
+
+exports.getHomeBrands = async (req, res, next) => {
+  try {
+    let items = await HomeBrand.find({ isActive: true }).sort({ order: 1, createdAt: 1 }).lean();
+    if (items.length === 0) {
+      await HomeBrand.insertMany(DEFAULT_INITIAL_BRANDS);
+      items = await HomeBrand.find({ isActive: true }).sort({ order: 1, createdAt: 1 }).lean();
+    }
+    res.json({ success: true, count: items.length, data: items });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.adminGetHomeBrands = async (req, res, next) => {
+  try {
+    let items = await HomeBrand.find({}).sort({ order: 1, createdAt: 1 }).lean();
+    if (items.length === 0) {
+      await HomeBrand.insertMany(DEFAULT_INITIAL_BRANDS);
+      items = await HomeBrand.find({}).sort({ order: 1, createdAt: 1 }).lean();
+    }
+    res.json({ success: true, count: items.length, data: items });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.createHomeBrand = async (req, res, next) => {
+  try {
+    const { name, logo, icon, category, websiteUrl, order, isActive } = req.body;
+
+    if (!name || typeof name !== "string" || !name.trim()) {
+      return res.status(400).json({ success: false, message: "Brand name is required" });
+    }
+
+    const item = await HomeBrand.create({
+      name: name.trim(),
+      logo: (logo || "").trim(),
+      icon: (icon || "").trim(),
+      category: (category || "Global Partner").trim(),
+      websiteUrl: (websiteUrl || "").trim(),
+      order: Number.isFinite(Number(order)) ? Math.max(0, Number(order)) : 0,
+      isActive: isActive !== undefined ? Boolean(isActive) : true,
+    });
+
+    res.status(201).json({ success: true, data: item, message: `Brand "${item.name}" created successfully` });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.updateHomeBrand = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { name, logo, icon, category, websiteUrl, order, isActive } = req.body;
+
+    const updateData = {};
+    if (name !== undefined) {
+      if (!name || typeof name !== "string" || !name.trim()) {
+        return res.status(400).json({ success: false, message: "Brand name cannot be empty" });
+      }
+      updateData.name = name.trim();
+    }
+    if (logo !== undefined) updateData.logo = logo.trim();
+    if (icon !== undefined) updateData.icon = icon.trim();
+    if (category !== undefined) updateData.category = category.trim();
+    if (websiteUrl !== undefined) updateData.websiteUrl = websiteUrl.trim();
+    if (order !== undefined) updateData.order = Math.max(0, Number(order) || 0);
+    if (isActive !== undefined) updateData.isActive = Boolean(isActive);
+
+    const item = await HomeBrand.findByIdAndUpdate(id, updateData, { new: true, runValidators: true });
+    if (!item) {
+      return res.status(404).json({ success: false, message: "Brand not found" });
+    }
+
+    res.json({ success: true, data: item, message: `Brand "${item.name}" updated successfully` });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.deleteHomeBrand = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const item = await HomeBrand.findByIdAndDelete(id);
+    if (!item) {
+      return res.status(404).json({ success: false, message: "Brand not found" });
+    }
+    res.json({ success: true, message: `Brand "${item.name}" deleted successfully` });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.toggleHomeBrandStatus = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const item = await HomeBrand.findById(id);
+    if (!item) {
+      return res.status(404).json({ success: false, message: "Brand not found" });
+    }
+    item.isActive = !item.isActive;
+    await item.save();
+    res.json({ success: true, data: item, message: `Brand "${item.name}" is now ${item.isActive ? "Active" : "Paused"}` });
+  } catch (err) {
+    next(err);
+  }
+};
 
 
+
+
+
+/**
+ * ⚙️ Update a System Setting by key (Admin only — upsert)
+ */
+exports.updateSetting = async (req, res, next) => {
+  try {
+    const { key } = req.params;
+    const { value, description, category } = req.body;
+    const setting = await SystemSetting.findOneAndUpdate(
+      { key },
+      {
+        value,
+        ...(description !== undefined && { description }),
+        ...(category && { category }),
+        updatedBy: req.user?._id,
+      },
+      { new: true, upsert: true, runValidators: false }
+    );
+    res.json({ success: true, data: setting });
+  } catch (err) {
+    next(err);
+  }
+};
